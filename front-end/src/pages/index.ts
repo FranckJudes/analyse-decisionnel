@@ -1,0 +1,12 @@
+export { DashboardPage } from './dashboard-page';
+export { AIAssistantPage } from './ai-assistant-page';
+export { EcommercePage } from './ecommerce-page';
+export { TaskKanbanPage } from './task-kanban-page';
+export { TaskListPage } from './task-list-page';
+export { CalendarPage } from './calendar-page';
+export { ChatPage } from './chat-page';
+export { SupportTicketPage } from './support-ticket-page';
+export { ProfilePage } from './profile-page';
+export { SettingsPage } from './settings-page';
+export { LoginPage } from './login-page';
+export { RegisterPage } from './register-page';
