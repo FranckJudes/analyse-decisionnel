@@ -7,3 +7,4 @@ export { Badge } from './badge';
 export { Avatar } from './avatar';
 export { Tabs } from './tabs';
 export { ThemeSelector } from './theme-selector';
+export { Pagination } from './pagination';

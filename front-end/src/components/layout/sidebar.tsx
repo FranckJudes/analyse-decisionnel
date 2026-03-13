@@ -47,13 +47,12 @@ const workspaceNavigation: NavigationGroup[] = [
     label: 'Pilotage BPM',
     items: [
       {
-        label: 'Cockpit décisionnel',
+        label: 'Dashbord',
         path: '/',
         icon: BarChart3,
-        description: 'KPIs d’exécution consolidés',
       },
       { label: 'Assistant analytique', path: '/ai-assistant', icon: Sparkles },
-      { label: 'Modèles dimensionnels', path: '/e-commerce', icon: Layers },
+      { label: 'Conception', path: '/conception', icon: Layers },
       {
         label: 'Journaux d’événements',
         path: '/task/kanban',

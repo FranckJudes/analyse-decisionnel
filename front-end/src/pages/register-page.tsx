@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Mail, Lock, User, Eye, EyeOff, Zap, Check } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, Check, Workflow, Compass, Layers } from 'lucide-react';
 import { Button, Input } from '../components/ui';
-import { AuthLayout } from '../components/layout/auth-layout';
 
 export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -28,13 +27,45 @@ export function RegisterPage() {
   };
 
   return (
-    <AuthLayout>
-      <div className="text-center mb-8">
-        <div className="w-12 h-12 bg-[#3c50e0] rounded-xl flex items-center justify-center mx-auto mb-4 lg:hidden">
-          <Zap className="w-6 h-6 text-white" />
+    <>
+      <div className="text-center mb-10">
+        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <Workflow className="w-4 h-4 text-[#3c50e0]" />
+          BPMN Decision Analytics
+        </span>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          Spin up a new decision workspace
+        </h1>
+        <p className="mt-3 text-base text-slate-600 dark:text-slate-300">
+          Invite collaborators, map every gateway, and monitor governance from day zero.
+        </p>
+      </div>
+
+      <div className="mb-10 grid grid-cols-1 gap-4 text-left sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/40">
+          <p className="text-xs uppercase tracking-wider text-slate-400">Model library</p>
+          <div className="mt-2 flex items-center gap-2">
+            <Layers className="h-5 w-5 text-purple-500" />
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">150+ assets</p>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Reusable pools, lanes, and connectors.</p>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Create an account</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2">Enter your information to get started</p>
+        <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/40">
+          <p className="text-xs uppercase tracking-wider text-slate-400">Scenario kit</p>
+          <div className="mt-2 flex items-center gap-2">
+            <Compass className="h-5 w-5 text-emerald-500" />
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">8 playbooks</p>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Stress-test SLA and compliance paths.</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/40">
+          <p className="text-xs uppercase tracking-wider text-slate-400">Automation</p>
+          <div className="mt-2 flex items-center gap-2">
+            <Workflow className="h-5 w-5 text-sky-500" />
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">Live sync</p>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Push models to your orchestration engine.</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -125,7 +156,7 @@ export function RegisterPage() {
         </label>
 
         <Button type="submit" className="w-full" disabled={!agreeTerms}>
-          Create Account
+          Launch workspace
         </Button>
       </form>
 
@@ -161,11 +192,11 @@ export function RegisterPage() {
       </div>
 
       <p className="mt-8 text-center text-sm text-slate-500 dark:text-slate-400">
-        Already have an account?{' '}
+        Already building flows?{' '}
         <Link to="/login" className="text-[#3c50e0] hover:text-blue-700 font-medium">
           Sign in
         </Link>
       </p>
-    </AuthLayout>
+    </>
   );
 }

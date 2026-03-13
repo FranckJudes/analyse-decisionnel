@@ -4,7 +4,8 @@ import { AuthLayout } from '../components/layout/auth-layout';
 import {
   DashboardPage,
   AIAssistantPage,
-  EcommercePage,
+  ConceptionPage,
+  NewProcessPage,
   TaskKanbanPage,
   TaskListPage,
   CalendarPage,
@@ -49,10 +50,16 @@ const aiAssistantRoute = createRoute({
   component: AIAssistantPage,
 });
 
-const ecommerceRoute = createRoute({
+const conceptionRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/e-commerce',
-  component: EcommercePage,
+  path: '/conception',
+  component: ConceptionPage,
+});
+
+const newProcessRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/conception/nouveau',
+  component: NewProcessPage,
 });
 
 const taskKanbanRoute = createRoute({
@@ -112,7 +119,8 @@ const registerRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   aiAssistantRoute,
-  ecommerceRoute,
+  conceptionRoute,
+  newProcessRoute,
   taskKanbanRoute,
   taskListRoute,
   calendarRoute,

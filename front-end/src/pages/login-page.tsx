@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Mail, Lock, Eye, EyeOff, Zap } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Workflow, LineChart, ShieldCheck } from 'lucide-react';
 import { Button, Input } from '../components/ui';
-import { AuthLayout } from '../components/layout/auth-layout';
 
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -16,13 +15,45 @@ export function LoginPage() {
   };
 
   return (
-    <AuthLayout>
-      <div className="text-center mb-8">
-        <div className="w-12 h-12 bg-[#3c50e0] rounded-xl flex items-center justify-center mx-auto mb-4 lg:hidden">
-          <Zap className="w-6 h-6 text-white" />
+    <>
+      <div className="text-center mb-10">
+        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <Workflow className="w-4 h-4 text-[#3c50e0]" />
+          BPMN Decision Analytics
+        </span>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          Orchestrate confident decisions
+        </h1>
+        <p className="mt-3 text-base text-slate-600 dark:text-slate-300">
+          Connect your BPMN models, simulate scenarios, and surface actionable insights for every approval path.
+        </p>
+      </div>
+
+      <div className="mb-10 grid grid-cols-1 gap-4 text-left sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/40">
+          <p className="text-xs uppercase tracking-wider text-slate-400">Cycle time</p>
+          <div className="mt-2 flex items-center gap-2">
+            <LineChart className="h-5 w-5 text-emerald-500" />
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">-18%</p>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Optimized via gateway pruning</p>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome back</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2">Enter your credentials to access your account</p>
+        <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/40">
+          <p className="text-xs uppercase tracking-wider text-slate-400">Coverage</p>
+          <div className="mt-2 flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-sky-500" />
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">97%</p>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Automated compliance guardrails</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/40">
+          <p className="text-xs uppercase tracking-wider text-slate-400">Simulations</p>
+          <div className="mt-2 flex items-center gap-2">
+            <Workflow className="h-5 w-5 text-purple-500" />
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">420+</p>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Monthly BPMN what-if runs</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -63,11 +94,11 @@ export function LoginPage() {
               onChange={(e) => setRememberMe(e.target.checked)}
               className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-[#3c50e0] focus:ring-[#3c50e0]"
             />
-            <span className="text-sm text-slate-600 dark:text-slate-300">Remember me</span>
+            <span className="text-sm text-slate-600 dark:text-slate-300">Keep me aligned to my models</span>
           </label>
-          <Link to="/forgot-password" className="text-sm text-[#3c50e0] hover:text-blue-700">
+          <a href="/forgot-password" className="text-sm text-[#3c50e0] hover:text-blue-700">
             Forgot password?
-          </Link>
+          </a>
         </div>
 
         <Button type="submit" className="w-full">
@@ -112,6 +143,6 @@ export function LoginPage() {
           Sign up
         </Link>
       </p>
-    </AuthLayout>
+    </>
   );
 }
