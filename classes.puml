@@ -1,0 +1,108 @@
+@startuml classes
+!pragma layout smetana
+title Diagramme de Classes — ProcessIntel BI
+
+skinparam classBackgroundColor #f8fafc
+skinparam classBorderColor #6366f1
+skinparam classHeaderBackgroundColor #6366f1
+skinparam classHeaderFontColor #ffffff
+skinparam arrowColor #334155
+
+' ── Domaine métier ───────────────────────────────────────────────
+
+class BpmnProcess {
+  - id : Long
+  - name : String
+  - xmlContent : String
+  - version : Integer
+  - deployedAt : LocalDateTime
+}
+
+class ProcessInstance {
+  - instanceId : String
+  - processKey : String
+  - startTime : LocalDateTime
+  - endTime : LocalDateTime
+  - state : String
+  + getDuration() : Long
+}
+
+class EventLog {
+  - caseId : String
+  - activity : String
+  - timestamp : LocalDateTime
+  - actor : String
+  - status : String
+  - durationMin : Integer
+}
+
+' ── Modèle en étoile BI ──────────────────────────────────────────
+
+class FaitExecution {
+  - caseId : String
+  - dateKey : String
+  - activityId : Integer
+  - actorId : Integer
+  - durationMin : Integer
+  - isError : Boolean
+}
+
+class DimActivite {
+  - activityId : Integer
+  - name : String
+  - slaHours : Double
+}
+
+class DimTemps {
+  - dateKey : String
+  - year : Integer
+  - quarter : String
+  - month : String
+}
+
+class DimActeur {
+  - actorId : Integer
+  - name : String
+  - role : String
+}
+
+' ── KPIs ─────────────────────────────────────────────────────────
+
+class KpiData {
+  - elementId : String
+  - avgDuration : Double
+  - errorRate : Double
+  - count : Integer
+  - status : String
+}
+
+class SimulationConfig {
+  - processKey : String
+  - numCases : Integer
+  - scenario : String
+  - errorRate : Double
+}
+
+' ── Sécurité ─────────────────────────────────────────────────────
+
+class UserEntity {
+  - id : Long
+  - username : String
+  - email : String
+  - role : String
+}
+
+' ── Relations ────────────────────────────────────────────────────
+
+BpmnProcess "1" --> "0..*" ProcessInstance : instancie
+ProcessInstance "1" --> "0..*" EventLog : génère
+
+EventLog "0..*" ..> FaitExecution : ETL
+FaitExecution --> DimActivite
+FaitExecution --> DimTemps
+FaitExecution --> DimActeur
+
+EventLog "0..*" ..> KpiData : buildKpiData()
+SimulationConfig ..> EventLog : génère
+
+@enduml

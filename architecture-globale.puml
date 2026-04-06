@@ -1,0 +1,44 @@
+@startuml architecture-globale
+!pragma layout smetana
+title Architecture Globale — ProcessIntel BI
+
+skinparam rectangleBackgroundColor #f8fafc
+skinparam rectangleBorderColor #6366f1
+skinparam arrowColor #334155
+skinparam arrowThickness 1.5
+skinparam packageBorderColor #94a3b8
+skinparam packageFontStyle bold
+skinparam defaultTextAlignment center
+skinparam linetype ortho
+
+package "Frontend — React 19 + Tailwind" #ede9fe {
+  rectangle "Dashboard BI\nProcess Monitor\nEvent Logs & ETL\nSimulation\nAnalytics" as PAGES #ddd6fe
+  rectangle "BpmnKpiViewer\n(bpmn-js)" as BPMN #e0e7ff
+  rectangle "Services JS\n(fetch API)" as SVC #fef9c3
+}
+
+package "Backend — Spring Boot 3" #dcfce7 {
+  rectangle "API REST\n(/api/**)" as API #bbf7d0
+  rectangle "Camunda Engine 7\n(BPM)" as CAMUNDA #dbeafe
+  rectangle "PostgreSQL" as PG #fef9c3
+}
+
+package "Microservice Analyse" #fee2e2 {
+  rectangle "PM4Py\n(Python / Flask)" as PM4PY #dcfce7
+}
+
+PAGES --> BPMN : affiche overlay KPIs
+PAGES --> SVC  : appels API
+
+SVC --> API : REST + JWT
+
+API --> CAMUNDA : déploiement\n& exécution
+API --> PG      : persistance
+API --> PM4PY   : analyses\n(découverte, variants,\ngoulots, prédiction)
+
+note bottom of PAGES
+  Simulation & ETL :
+  100% frontend, sans API
+end note
+
+@enduml

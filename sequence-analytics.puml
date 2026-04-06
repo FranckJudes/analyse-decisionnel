@@ -1,0 +1,138 @@
+@startuml sequence-analytics
+!pragma layout smetana
+title Séquence — Analyse Avancée PM4Py (Découverte, Variants, Goulots)
+
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+skinparam sequenceParticipantBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f8fafc
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+actor       "Analyste BI"                    as ANALYST
+participant "AdvancedAnalyticsPage\n(UI)"    as UI
+participant "analyticsService\n(JS)"         as SVC
+participant "BpmnAnalyticsController\n(Spring)" as CTRL
+participant "BpmnAnalyticsService\n(Spring)" as BACK
+participant "Service PM4Py\n(Python/Flask)"  as PM4PY
+database    "PostgreSQL"                      as DB
+
+== 1. Ouverture de la page ==
+
+ANALYST -> UI : Navigue vers /advanced-analytics
+activate UI
+UI -> SVC : getAllEventLogs()
+activate SVC
+SVC -> CTRL : GET /api/analytics/logs
+activate CTRL
+CTRL -> DB : SELECT * FROM event_logs
+DB --> CTRL : EventLog[]
+CTRL --> SVC : EventLog[]
+deactivate CTRL
+SVC --> UI : logs[]
+deactivate SVC
+UI --> ANALYST : Onglets : Découverte / Variants\n/ Goulots / Prédiction / Réseau social
+deactivate UI
+
+== 2. Découverte de Processus ==
+
+ANALYST -> UI : Clique onglet "Découverte"\nClique "Lancer l'analyse"
+activate UI
+UI -> SVC : processDiscovery(logs, threshold)
+activate SVC
+SVC -> CTRL : POST /api/analytics/process-discovery\n{ eventLogs: [...], threshold: 0.5 }
+activate CTRL
+CTRL -> BACK : callProcessDiscovery(request)
+activate BACK
+BACK -> PM4PY : POST /process-discovery\n{ case_id, activity, timestamp, ... }
+activate PM4PY
+PM4PY -> PM4PY : pm4py.discover_petri_net_inductive(df)
+PM4PY -> PM4PY : construire graphe DFG
+PM4PY --> BACK : { nodes[], edges[], fitness, precision }
+deactivate PM4PY
+BACK --> CTRL : ProcessDiscoveryResponseDTO
+deactivate BACK
+CTRL --> SVC : ApiResponse<ProcessDiscoveryResponseDTO>
+deactivate CTRL
+SVC --> UI : résultat découverte
+deactivate SVC
+UI --> ANALYST : Graphe de découverte\n+ métriques fitness/précision
+deactivate UI
+
+== 3. Analyse des Variants ==
+
+ANALYST -> UI : Clique onglet "Variants"
+activate UI
+UI -> SVC : processVariants(logs, minFrequency)
+activate SVC
+SVC -> CTRL : POST /api/analytics/process-variants\n{ eventLogs: [...], minFrequency: 5 }
+activate CTRL
+CTRL -> BACK : callVariantsAnalysis(request)
+activate BACK
+BACK -> PM4PY : POST /process-variants
+activate PM4PY
+PM4PY -> PM4PY : identifier séquences uniques\npar case_id
+PM4PY -> PM4PY : calculer fréquence + durée moy.\npour chaque variant
+PM4PY --> BACK : { variants: [{ path[], count, avgDuration }] }
+deactivate PM4PY
+BACK --> CTRL : ProcessVariantsResponseDTO
+deactivate BACK
+CTRL --> SVC : ApiResponse<ProcessVariantsResponseDTO>
+deactivate CTRL
+SVC --> UI : variants[]
+deactivate SVC
+UI --> ANALYST : Liste des variants triés\npar fréquence
+deactivate UI
+
+== 4. Détection des Goulots ==
+
+ANALYST -> UI : Clique onglet "Goulots"
+activate UI
+UI -> SVC : bottleneckAnalysis(logs)
+activate SVC
+SVC -> CTRL : POST /api/analytics/bottleneck\n{ eventLogs: [...] }
+activate CTRL
+CTRL -> BACK : callBottleneckAnalysis(request)
+activate BACK
+BACK -> PM4PY : POST /bottleneck-analysis
+activate PM4PY
+PM4PY -> PM4PY : calculer durée moy.\npour chaque activité
+PM4PY -> PM4PY : comparer avec SLA
+PM4PY -> PM4PY : classer par waiting_time DESC
+PM4PY --> BACK : { bottlenecks: [{ activity, avgDuration,\n waitingTime, isBottleneck }] }
+deactivate PM4PY
+BACK --> CTRL : BottleneckAnalysisResponseDTO
+deactivate BACK
+CTRL --> SVC : ApiResponse<BottleneckResponseDTO>
+deactivate CTRL
+SVC --> UI : bottlenecks[]
+deactivate SVC
+UI --> ANALYST : Tableau goulots\ntrié par durée décroissante
+deactivate UI
+
+== 5. Prédiction de Performance ==
+
+ANALYST -> UI : Clique onglet "Prédiction"\nSaisit paramètres
+activate UI
+UI -> SVC : performancePrediction(logs, config)
+activate SVC
+SVC -> CTRL : POST /api/analytics/performance-prediction
+activate CTRL
+CTRL -> BACK : callPerformancePrediction(request)
+activate BACK
+BACK -> PM4PY : POST /performance-prediction\n{ logs, forecastHorizon, model }
+activate PM4PY
+PM4PY -> PM4PY : entraîner modèle ML\n(RandomForest / LinearRegression)
+PM4PY -> PM4PY : prédire cycle time\npour les N prochains cas
+PM4PY --> BACK : { predictions: [{ date, predictedDuration,\n confidence }] }
+deactivate PM4PY
+BACK --> CTRL : PerformancePredictionResponseDTO
+deactivate BACK
+CTRL --> SVC : résultat prédiction
+deactivate CTRL
+SVC --> UI : predictions[]
+deactivate SVC
+UI --> ANALYST : Graphe de prédiction\n+ intervalle de confiance
+deactivate UI
+
+@enduml

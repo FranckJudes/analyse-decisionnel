@@ -1,0 +1,124 @@
+@startuml sequence-bpmn-monitor
+!pragma layout smetana
+title Séquence — Suivi BPMN Interactif avec Overlay KPIs
+
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+skinparam sequenceParticipantBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f8fafc
+skinparam sequenceLifeLineBorderColor #cbd5e1
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+actor       "Analyste BI"            as ANALYST
+participant "ProcessMonitorPage\n(UI)"       as UI
+participant "bpmnModelService\n(JS)"         as SVC_BPMN
+participant "analyticsService\n(JS)"         as SVC_ANA
+participant "Backend Spring\n/api/bpmn"      as BACK_BPMN
+participant "Backend Spring\n/api/analytics" as BACK_ANA
+participant "Camunda Engine"                  as CAMUNDA
+participant "BpmnKpiViewer\n(composant)"     as VIEWER
+database    "bpmn-js\nNavigatedViewer"        as BPMNJS
+
+== 1. Chargement de la page ==
+
+ANALYST -> UI : Navigue vers /process-monitor
+activate UI
+UI -> SVC_BPMN : getMyDeployedProcesses()
+activate SVC_BPMN
+SVC_BPMN -> BACK_BPMN : GET /api/bpmn/my-processes\n(Authorization: Bearer <token>)
+activate BACK_BPMN
+BACK_BPMN -> CAMUNDA : listProcessDefinitions()
+CAMUNDA --> BACK_BPMN : ProcessDefinition[]
+BACK_BPMN --> SVC_BPMN : ApiResponse<BpmnProcess[]>
+deactivate BACK_BPMN
+SVC_BPMN --> UI : processus[]
+deactivate SVC_BPMN
+UI --> ANALYST : Select "Choisir un processus" peuplé
+deactivate UI
+
+== 2. Sélection d'un processus ==
+
+ANALYST -> UI : Sélectionne processus + période
+activate UI
+UI -> SVC_BPMN : getBpmnModel(processId)
+activate SVC_BPMN
+SVC_BPMN -> BACK_BPMN : GET /api/bpmn/{id}/xml
+BACK_BPMN --> SVC_BPMN : { xml: "<?xml..." }
+SVC_BPMN --> UI : xmlString
+deactivate SVC_BPMN
+
+UI -> SVC_ANA : getProcessLogsForAnalytics(processKey, dateFrom, dateTo)
+activate SVC_ANA
+SVC_ANA -> BACK_ANA : GET /api/analytics/logs?process=X&from=Y&to=Z
+activate BACK_ANA
+BACK_ANA -> CAMUNDA : getHistoryLogs(processKey, dateRange)
+CAMUNDA --> BACK_ANA : HistoricActivityInstance[]
+BACK_ANA -> BACK_ANA : transformer → EventLog[]
+BACK_ANA --> SVC_ANA : EventLog[]
+deactivate BACK_ANA
+SVC_ANA --> UI : logs[]
+deactivate SVC_ANA
+
+UI -> UI : buildKpiData(logs)\n→ kpiData { [activityId]: KpiData }
+UI -> UI : computeGlobalKpis(logs)\n→ GlobalKpis
+UI --> ANALYST : KPI cards + tableau activités mis à jour
+deactivate UI
+
+== 3. Rendu BPMN + Overlays ==
+
+UI -> VIEWER : render(<BpmnKpiViewer xml={xml} kpiData={kpiData}>)
+activate VIEWER
+
+VIEWER -> BPMNJS : new NavigatedViewer({ container })
+activate BPMNJS
+BPMNJS --> VIEWER : instance viewer
+
+VIEWER -> BPMNJS : viewer.importXML(xml)
+BPMNJS -> BPMNJS : parse XML BPMN\nconstruire graphe interne
+BPMNJS --> VIEWER : { warnings }
+
+VIEWER -> BPMNJS : canvas.zoom('fit-viewport', 'auto')
+VIEWER -> VIEWER : applyOverlays(viewer, kpiData)
+
+loop pour chaque élément dans elementRegistry
+  VIEWER -> BPMNJS : canvas.getGraphics(element)
+  BPMNJS --> VIEWER : SVG <g> element
+
+  alt élément a des KPIs
+    VIEWER -> VIEWER : getColor(kpi)\n→ { fill, stroke }
+    VIEWER -> BPMNJS : shape.style.fill = colors.fill\nshape.style.stroke = colors.stroke
+    note right : Coloration verte/orange/rouge\nselon errorRate & avgDuration
+  end
+
+  alt élément a avgDuration
+    VIEWER -> BPMNJS : overlays.add(elementId, 'kpi-badge',\n{ position: {top:-32}, html: badge })
+    note right : Badge HTML :\n⏱ 4.2h · 124× · ⚠ 3%
+  end
+
+  alt élément est SequenceFlow
+    VIEWER -> BPMNJS : path.style.strokeWidth = log2(count)
+    note right : Flèches plus épaisses\nselon le volume
+  end
+end
+
+VIEWER -> BPMNJS : eventBus.on('element.click', handler)
+deactivate BPMNJS
+VIEWER --> UI : diagramme rendu avec overlays
+deactivate VIEWER
+UI --> ANALYST : Diagramme BPMN coloré + badges KPIs
+activate UI
+
+== 4. Clic sur un noeud ==
+
+ANALYST -> UI : Clique sur un noeud BPMN
+UI -> VIEWER : eventBus émet 'element.click'
+activate VIEWER
+VIEWER -> UI : onNodeClick(elementId, kpiData, element)
+deactivate VIEWER
+
+UI -> UI : setClickedNode({ id, kpi, element })\n→ afficher NodeTooltip
+UI --> ANALYST : Panel détail :\navgDuration, min, max,\ncount, errorRate, statut
+deactivate UI
+
+@enduml

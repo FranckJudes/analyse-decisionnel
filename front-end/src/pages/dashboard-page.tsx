@@ -1,33 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   TrendingUp,
   TrendingDown,
-  Users,
-  ShoppingCart,
-  DollarSign,
-  Eye,
   ArrowUpRight,
   ArrowDownRight,
-  MoreHorizontal,
-  Download,
   RefreshCw,
-  Star,
-  Package,
+  Download,
+  Activity,
+  BarChart2,
   CheckCircle,
   Clock,
   XCircle,
-  Activity,
-  BarChart2,
-  PieChart,
-  Target,
-  Award,
+  AlertTriangle,
+  Layers,
+  GitBranch,
   Zap,
-  Globe,
-  Smartphone,
-  Monitor,
-  Tablet,
+  Target,
+  Users,
+  MoreHorizontal,
+  Eye,
 } from 'lucide-react';
 import { useThemeClasses } from '../hooks/useThemeClasses';
+import { Link } from '@tanstack/react-router';
 
 // ─── Mini sparkline SVG ───────────────────────────────────────────────────────
 function Sparkline({ data, color }: { data: number[]; color: string }) {
@@ -55,7 +49,7 @@ function BarChart({ data, color }: { data: { label: string; value: number }[]; c
         <div key={i} className="flex flex-col items-center gap-1 flex-1">
           <div
             className="w-full rounded-t transition-all duration-500"
-            style={{ height: `${(d.value / max) * 100}%`, background: color, opacity: 0.75 + (i / data.length) * 0.25 }}
+            style={{ height: `${(d.value / max) * 100}%`, background: color, opacity: 0.7 + (i / data.length) * 0.3 }}
           />
           <span className="text-[9px] text-slate-400 dark:text-slate-500 whitespace-nowrap">{d.label}</span>
         </div>
@@ -82,155 +76,204 @@ function DonutSegment({ cx, cy, r, start, end, color }: {
   );
 }
 
-function DonutChart({ segments }: { segments: { value: number; color: string; label: string }[] }) {
+function DonutChart({ segments, centerLabel }: {
+  segments: { value: number; color: string; label: string }[];
+  centerLabel?: string;
+}) {
   const total = segments.reduce((s, d) => s + d.value, 0);
   let current = 0;
   return (
-    <svg viewBox="0 0 120 120" className="w-28 h-28">
-      {segments.map((seg, i) => {
-        const start = (current / total) * 360;
-        const end = ((current + seg.value) / total) * 360;
-        current += seg.value;
-        return <DonutSegment key={i} cx={60} cy={60} r={50} start={start} end={end} color={seg.color} />;
-      })}
-      <circle cx={60} cy={60} r={30} className="fill-white dark:fill-slate-800" />
-    </svg>
+    <div className="relative flex items-center justify-center">
+      <svg viewBox="0 0 120 120" className="w-28 h-28">
+        {segments.map((seg, i) => {
+          const start = (current / total) * 360;
+          const end = ((current + seg.value) / total) * 360;
+          current += seg.value;
+          return <DonutSegment key={i} cx={60} cy={60} r={50} start={start} end={end} color={seg.color} />;
+        })}
+        <circle cx={60} cy={60} r={30} className="fill-white dark:fill-slate-800" />
+      </svg>
+      {centerLabel && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-sm font-bold text-slate-800 dark:text-white">{centerLabel}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
+// ─── Static demo data (process-oriented) ────────────────────────────────────
+
 const kpiCards = [
   {
-    title: 'Total Revenue',
-    value: '$84,540',
-    change: '+12.5%',
+    title: 'Instances actives',
+    value: '1 284',
+    change: '+9.3%',
     positive: true,
-    icon: DollarSign,
-    sparkline: [40, 55, 48, 70, 62, 80, 75, 95, 88, 104],
+    icon: Layers,
+    sparkline: [30, 42, 38, 55, 60, 72, 68, 80, 85, 92],
     color: '#6366f1',
-    bg: 'bg-indigo-50 dark:bg-indigo-900/20',
     iconBg: 'bg-indigo-500',
   },
   {
-    title: 'Total Users',
-    value: '28,451',
-    change: '+8.2%',
+    title: 'Taux de conformité',
+    value: '94.7%',
+    change: '+2.1 pts',
     positive: true,
-    icon: Users,
-    sparkline: [30, 42, 58, 50, 65, 72, 68, 80, 85, 90],
+    icon: CheckCircle,
+    sparkline: [88, 90, 89, 91, 92, 93, 91, 94, 95, 95],
     color: '#10b981',
-    bg: 'bg-emerald-50 dark:bg-emerald-900/20',
     iconBg: 'bg-emerald-500',
   },
   {
-    title: 'Total Orders',
-    value: '5,231',
-    change: '-3.1%',
-    positive: false,
-    icon: ShoppingCart,
-    sparkline: [60, 55, 68, 52, 48, 45, 50, 43, 40, 38],
+    title: 'Temps de cycle moyen',
+    value: '3.2 j',
+    change: '-0.4 j',
+    positive: true,
+    icon: Clock,
+    sparkline: [4.2, 4.0, 3.9, 3.8, 3.7, 3.5, 3.6, 3.4, 3.3, 3.2],
     color: '#f59e0b',
-    bg: 'bg-amber-50 dark:bg-amber-900/20',
     iconBg: 'bg-amber-500',
   },
   {
-    title: 'Page Views',
-    value: '1.2M',
-    change: '+22.4%',
+    title: "Taux d'erreur",
+    value: '5.3%',
+    change: '-1.8 pts',
     positive: true,
-    icon: Eye,
-    sparkline: [20, 35, 40, 55, 60, 75, 80, 88, 95, 100],
-    color: '#8b5cf6',
-    bg: 'bg-violet-50 dark:bg-violet-900/20',
-    iconBg: 'bg-violet-500',
+    icon: XCircle,
+    sparkline: [9, 8.5, 8, 7.5, 7, 7.2, 6.5, 6, 5.8, 5.3],
+    color: '#ef4444',
+    iconBg: 'bg-red-500',
   },
 ];
 
-const revenueData = [
-  { label: 'Jan', value: 32 },
-  { label: 'Fév', value: 58 },
-  { label: 'Mar', value: 45 },
-  { label: 'Avr', value: 70 },
-  { label: 'Mai', value: 62 },
-  { label: 'Jun', value: 88 },
-  { label: 'Jul', value: 75 },
-  { label: 'Aoû', value: 96 },
-  { label: 'Sep', value: 84 },
-  { label: 'Oct', value: 110 },
-  { label: 'Nov', value: 98 },
-  { label: 'Déc', value: 125 },
+const cycleTrend = [
+  { label: 'Jan', value: 4.2 },
+  { label: 'Fév', value: 4.0 },
+  { label: 'Mar', value: 3.9 },
+  { label: 'Avr', value: 3.8 },
+  { label: 'Mai', value: 3.5 },
+  { label: 'Jun', value: 3.6 },
+  { label: 'Jul', value: 3.4 },
+  { label: 'Aoû', value: 3.2 },
+  { label: 'Sep', value: 3.1 },
+  { label: 'Oct', value: 3.2 },
+  { label: 'Nov', value: 3.0 },
+  { label: 'Déc', value: 2.9 },
 ];
 
-const trafficSources = [
-  { label: 'Organique', value: 45, color: '#6366f1' },
-  { label: 'Direct', value: 28, color: '#10b981' },
-  { label: 'Social', value: 18, color: '#f59e0b' },
-  { label: 'Référent', value: 9, color: '#8b5cf6' },
+const volumeTrend = [
+  { label: 'Jan', value: 980 },
+  { label: 'Fév', value: 1050 },
+  { label: 'Mar', value: 1100 },
+  { label: 'Avr', value: 1200 },
+  { label: 'Mai', value: 1150 },
+  { label: 'Jun', value: 1280 },
+  { label: 'Jul', value: 1190 },
+  { label: 'Aoû', value: 1284 },
+  { label: 'Sep', value: 1310 },
+  { label: 'Oct', value: 1350 },
+  { label: 'Nov', value: 1290 },
+  { label: 'Déc', value: 1400 },
 ];
 
-const recentOrders = [
-  { id: '#ORD-4521', customer: 'Alice Martin', product: 'MacBook Pro 16"', amount: '$2,499', status: 'completed', date: 'Il y a 2h' },
-  { id: '#ORD-4520', customer: 'Bernard Dupont', product: 'AirPods Max', amount: '$549', status: 'pending', date: 'Il y a 4h' },
-  { id: '#ORD-4519', customer: 'Camille Leroy', product: 'iPhone 15 Pro', amount: '$1,199', status: 'processing', date: 'Il y a 5h' },
-  { id: '#ORD-4518', customer: 'David Chen', product: 'iPad Pro 12.9"', amount: '$1,099', status: 'completed', date: 'Hier' },
-  { id: '#ORD-4517', customer: 'Emma Wilson', product: 'Apple Watch S9', amount: '$429', status: 'cancelled', date: 'Hier' },
-  { id: '#ORD-4516', customer: 'François Petit', product: 'Mac Studio', amount: '$1,999', status: 'completed', date: 'Il y a 2j' },
+const conformitySegments = [
+  { label: 'Conforme', value: 947, color: '#10b981' },
+  { label: 'Déviation mineure', value: 38, color: '#f59e0b' },
+  { label: 'Non-conforme', value: 15, color: '#ef4444' },
 ];
 
-const activities = [
-  { icon: Users, color: 'bg-indigo-500', text: 'Nouvel utilisateur inscrit : Sophie Mercier', time: 'Il y a 3 min' },
-  { icon: ShoppingCart, color: 'bg-emerald-500', text: 'Commande #ORD-4521 marquée comme complétée', time: 'Il y a 12 min' },
-  { icon: Star, color: 'bg-amber-500', text: 'Avis 5 étoiles reçu sur MacBook Pro', time: 'Il y a 35 min' },
-  { icon: Target, color: 'bg-violet-500', text: 'Objectif mensuel atteint à 87%', time: 'Il y a 1h' },
-  { icon: Award, color: 'bg-rose-500', text: 'Badge "Top Vendeur" décerné à Alice Martin', time: 'Il y a 2h' },
-  { icon: Zap, color: 'bg-cyan-500', text: 'Alerte : pic de trafic sur la page Accueil', time: 'Il y a 3h' },
+const recentInstances = [
+  { id: 'PI-4821', process: 'Onboarding client', actor: 'Marie Dubois', duration: '1j 4h', status: 'completed', started: 'Il y a 2h' },
+  { id: 'PI-4820', process: 'Validation commande', actor: 'Jean Bernard', duration: '0j 6h', status: 'active', started: 'Il y a 5h' },
+  { id: 'PI-4819', process: 'Traitement réclamation', actor: 'Sophie Martin', duration: '4j 2h', status: 'slow', started: 'Il y a 4j' },
+  { id: 'PI-4818', process: 'Approbation budget', actor: 'Pierre Leroy', duration: '2j 8h', status: 'completed', started: 'Hier' },
+  { id: 'PI-4817', process: 'Validation fournisseur', actor: 'Claire Petit', duration: '—', status: 'error', started: 'Il y a 3j' },
+  { id: 'PI-4816', process: 'Onboarding client', actor: 'Thomas Roux', duration: '1j 1h', status: 'completed', started: 'Il y a 2j' },
 ];
 
-const topProducts = [
-  { name: 'MacBook Pro 16"', sales: 342, revenue: '$854,058', growth: 12 },
-  { name: 'iPhone 15 Pro', sales: 891, revenue: '$1,068,309', growth: 24 },
-  { name: 'iPad Pro 12.9"', sales: 214, revenue: '$235,186', growth: -5 },
-  { name: 'AirPods Max', sales: 567, revenue: '$311,283', growth: 18 },
-  { name: 'Apple Watch S9', sales: 428, revenue: '$183,612', growth: 9 },
+const bottleneckActivities = [
+  { name: 'Validation managériale', avgDuration: 18.4, sla: 8, overSla: true, count: 124, errorRate: 3.2 },
+  { name: 'Contrôle qualité', avgDuration: 12.1, sla: 6, overSla: true, count: 89, errorRate: 7.8 },
+  { name: 'Signature électronique', avgDuration: 6.8, sla: 4, overSla: true, count: 310, errorRate: 1.1 },
+  { name: 'Vérification conformité', avgDuration: 4.2, sla: 6, overSla: false, count: 267, errorRate: 4.5 },
+  { name: 'Notification client', avgDuration: 0.3, sla: 1, overSla: false, count: 891, errorRate: 0.2 },
 ];
 
-const deviceStats = [
-  { icon: Monitor, label: 'Desktop', value: 52, color: 'bg-indigo-500' },
-  { icon: Smartphone, label: 'Mobile', value: 35, color: 'bg-emerald-500' },
-  { icon: Tablet, label: 'Tablet', value: 13, color: 'bg-amber-500' },
+const processHealth = [
+  { name: 'Onboarding client', instances: 312, conformity: 97, cycleTime: 1.8, trend: 1 },
+  { name: 'Traitement réclamation', instances: 88, conformity: 82, cycleTime: 5.4, trend: -1 },
+  { name: 'Validation commande', instances: 445, conformity: 99, cycleTime: 0.4, trend: 1 },
+  { name: 'Approbation budget', instances: 67, conformity: 91, cycleTime: 3.1, trend: 0 },
+  { name: 'Gestion fournisseur', instances: 42, conformity: 88, cycleTime: 7.2, trend: -1 },
+];
+
+const recentAlerts = [
+  { icon: AlertTriangle, color: 'bg-red-500', text: 'Processus "Traitement réclamation" : SLA dépassé sur 14 instances', time: 'Il y a 12 min' },
+  { icon: Activity, color: 'bg-amber-500', text: 'Pic de volume détecté : +38% sur "Validation commande"', time: 'Il y a 1h' },
+  { icon: GitBranch, color: 'bg-indigo-500', text: 'Nouveau variant découvert sur "Onboarding client" (variant #7)', time: 'Il y a 2h' },
+  { icon: Users, color: 'bg-emerald-500', text: 'Acteur "Marie Dubois" : charge de travail à 95%', time: 'Il y a 3h' },
+  { icon: Zap, color: 'bg-violet-500', text: 'Déploiement BPMN v2.4 "Approbation budget" effectué', time: 'Il y a 5h' },
+  { icon: Target, color: 'bg-cyan-500', text: 'Objectif conformité Q4 atteint : 94.7% (cible 93%)', time: 'Hier' },
 ];
 
 const statusConfig = {
-  completed: { label: 'Complété', icon: CheckCircle, cls: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400' },
-  pending: { label: 'En attente', icon: Clock, cls: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' },
-  processing: { label: 'En cours', icon: RefreshCw, cls: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' },
-  cancelled: { label: 'Annulé', icon: XCircle, cls: 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400' },
+  completed: { label: 'Terminé', icon: CheckCircle, cls: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400' },
+  active: { label: 'En cours', icon: RefreshCw, cls: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' },
+  slow: { label: 'Lent', icon: Clock, cls: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' },
+  error: { label: 'Erreur', icon: XCircle, cls: 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400' },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function DashboardPage() {
   const { theme } = useThemeClasses();
-  const [activeTab, setActiveTab] = useState<'revenue' | 'traffic'>('revenue');
+  const [activeTab, setActiveTab] = useState<'cycle' | 'volume'>('cycle');
+  const printRef = useRef<HTMLDivElement>(null);
+
+  function handleExportPdf() {
+    const style = document.createElement('style');
+    style.id = '__pdf_print_style';
+    style.innerHTML = `
+      @media print {
+        body > * { display: none !important; }
+        #__dashboard_print { display: block !important; position: static !important; overflow: visible !important; }
+        #__dashboard_print * { overflow: visible !important; }
+        .no-print { display: none !important; }
+        @page { size: A4 landscape; margin: 12mm; }
+      }
+    `;
+    document.head.appendChild(style);
+    if (printRef.current) printRef.current.id = '__dashboard_print';
+    window.print();
+    document.head.removeChild(style);
+    if (printRef.current) printRef.current.removeAttribute('id');
+  }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6 space-y-6">
+    <div ref={printRef} className="flex-1 overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6 space-y-6">
 
       {/* ── Page header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Tableau de bord</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Tableau de bord BI</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Bienvenue ! Voici un aperçu de votre activité.
+            Supervision en temps réel des processus métier · Avril 2026
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-            <RefreshCw className="w-4 h-4" />
-            Actualiser
-          </button>
-          <button className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white ${theme.primary} rounded-lg transition-all hover:opacity-90 shadow-sm`}>
+          <Link
+            to="/process-monitor"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+          >
+            <Eye className="w-4 h-4" />
+            Suivi BPMN
+          </Link>
+          <button
+            onClick={handleExportPdf}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white ${theme.primary} rounded-lg transition-all hover:opacity-90 shadow-sm no-print`}
+          >
             <Download className="w-4 h-4" />
-            Exporter
+            Export PDF
           </button>
         </div>
       </div>
@@ -255,69 +298,70 @@ export function DashboardPage() {
         ))}
       </div>
 
-      {/* ── Row 2: Revenue chart + Traffic sources ── */}
+      {/* ── Row 2: Trend chart + Conformity donut ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* Revenue / Traffic chart */}
+        {/* Trend chart */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Aperçu des performances</h3>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Tendances des processus</h3>
               <p className="text-xs text-slate-400 mt-0.5">Janvier – Décembre 2025</p>
             </div>
             <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5 gap-0.5">
-              {(['revenue', 'traffic'] as const).map((t) => (
+              {(['cycle', 'volume'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setActiveTab(t)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activeTab === t
-                      ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
-                    }`}
+                    ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                  }`}
                 >
-                  {t === 'revenue' ? 'Revenus' : 'Trafic'}
+                  {t === 'cycle' ? 'Cycle time' : 'Volume'}
                 </button>
               ))}
             </div>
           </div>
           <div className="flex items-end justify-between gap-1 mb-2">
             <span className="text-2xl font-bold text-slate-900 dark:text-white">
-              {activeTab === 'revenue' ? '$84,540' : '1.2M'}
+              {activeTab === 'cycle' ? '3.2 jours' : '1 284 instances'}
             </span>
             <span className="text-xs text-emerald-500 flex items-center gap-1">
               <TrendingUp className="w-3.5 h-3.5" />
-              +{activeTab === 'revenue' ? '12.5' : '22.4'}% vs an dernier
+              {activeTab === 'cycle' ? '-10% vs an dernier' : '+31% vs an dernier'}
             </span>
           </div>
           <BarChart
-            data={revenueData}
-            color={activeTab === 'revenue' ? '#6366f1' : '#10b981'}
+            data={activeTab === 'cycle' ? cycleTrend : volumeTrend}
+            color={activeTab === 'cycle' ? '#6366f1' : '#10b981'}
           />
         </div>
 
-        {/* Traffic sources donut */}
+        {/* Conformity donut */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-slate-900 dark:text-white">Sources de trafic</h3>
-            <PieChart className="w-4 h-4 text-slate-400" />
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white">Conformité BPMN</h3>
+            <CheckCircle className="w-4 h-4 text-emerald-500" />
           </div>
           <div className="flex items-center justify-center mb-4">
-            <DonutChart
-              segments={trafficSources.map(s => ({ value: s.value, color: s.color, label: s.label }))}
-            />
+            <DonutChart segments={conformitySegments} centerLabel="94.7%" />
           </div>
           <div className="space-y-2.5">
-            {trafficSources.map((src) => (
-              <div key={src.label} className="flex items-center justify-between">
+            {conformitySegments.map((seg) => (
+              <div key={seg.label} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: src.color }} />
-                  <span className="text-sm text-slate-600 dark:text-slate-300">{src.label}</span>
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: seg.color }} />
+                  <span className="text-sm text-slate-600 dark:text-slate-300">{seg.label}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-24 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${src.value}%`, background: src.color }} />
+                  <div className="w-20 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{
+                      width: `${(seg.value / conformitySegments.reduce((a, s) => a + s.value, 0)) * 100}%`,
+                      background: seg.color
+                    }} />
                   </div>
-                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 w-7 text-right">{src.value}%</span>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 w-8 text-right">{seg.value}</span>
                 </div>
               </div>
             ))}
@@ -325,44 +369,46 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Row 3: Recent orders + Activity + Device stats ── */}
+      {/* ── Row 3: Recent instances + Alerts ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
-        {/* Recent Orders table */}
+        {/* Recent instances table */}
         <div className="xl:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-slate-400" />
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Commandes récentes</h3>
+              <GitBranch className="w-4 h-4 text-slate-400" />
+              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Instances récentes</h3>
             </div>
-            <button className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Voir tout</button>
+            <Link to="/process-monitor" className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+              Voir BPMN
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700">
-                  {['Commande', 'Client', 'Produit', 'Montant', 'Statut', 'Date'].map(h => (
+                  {['ID', 'Processus', 'Acteur', 'Durée', 'Statut', 'Démarré'].map(h => (
                     <th key={h} className="px-5 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                {recentOrders.map((order) => {
-                  const s = statusConfig[order.status as keyof typeof statusConfig];
+                {recentInstances.map((inst) => {
+                  const s = statusConfig[inst.status as keyof typeof statusConfig];
                   const SIcon = s.icon;
                   return (
-                    <tr key={order.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
-                      <td className="px-5 py-3 font-mono text-xs text-slate-500 dark:text-slate-400">{order.id}</td>
-                      <td className="px-5 py-3 font-medium text-slate-800 dark:text-slate-200">{order.customer}</td>
-                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400 max-w-[140px] truncate">{order.product}</td>
-                      <td className="px-5 py-3 font-semibold text-slate-900 dark:text-white">{order.amount}</td>
+                    <tr key={inst.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                      <td className="px-5 py-3 font-mono text-xs text-slate-500 dark:text-slate-400">{inst.id}</td>
+                      <td className="px-5 py-3 font-medium text-slate-800 dark:text-slate-200 max-w-[140px] truncate">{inst.process}</td>
+                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{inst.actor}</td>
+                      <td className="px-5 py-3 font-mono text-xs text-slate-600 dark:text-slate-400">{inst.duration}</td>
                       <td className="px-5 py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
                           <SIcon className="w-3 h-3" />
                           {s.label}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-xs text-slate-400">{order.date}</td>
+                      <td className="px-5 py-3 text-xs text-slate-400">{inst.started}</td>
                     </tr>
                   );
                 })}
@@ -371,26 +417,26 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Activity feed */}
+        {/* Alert feed */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-slate-400" />
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Activité récente</h3>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Alertes & événements</h3>
             </div>
             <button className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
               <MoreHorizontal className="w-4 h-4" />
             </button>
           </div>
           <div className="p-4 space-y-1">
-            {activities.map((act, i) => (
+            {recentAlerts.map((alert, i) => (
               <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                <div className={`w-8 h-8 ${act.color} rounded-lg flex items-center justify-center shrink-0 mt-0.5`}>
-                  <act.icon className="w-4 h-4 text-white" />
+                <div className={`w-8 h-8 ${alert.color} rounded-lg flex items-center justify-center shrink-0 mt-0.5`}>
+                  <alert.icon className="w-4 h-4 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug">{act.text}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{act.time}</p>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug">{alert.text}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{alert.time}</p>
                 </div>
               </div>
             ))}
@@ -398,105 +444,91 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Row 4: Top products + Device stats + Quick goals ── */}
+      {/* ── Row 4: Bottlenecks + Process health ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* Top products */}
+        {/* Bottleneck activities */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-slate-400" />
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Top produits</h3>
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Activités goulots d'étranglement</h3>
             </div>
-            <span className="text-xs text-slate-400">Ce mois</span>
+            <Link to="/advanced-analytics" className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+              Analyse complète
+            </Link>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-            {topProducts.map((p, i) => (
-              <div key={p.name} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-300 dark:text-slate-600 w-4">#{i + 1}</span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{p.name}</p>
-                    <p className="text-xs text-slate-400">{p.sales} ventes</p>
+            {bottleneckActivities.map((act) => (
+              <div key={act.name} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${act.overSla ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{act.name}</p>
+                    <p className="text-xs text-slate-400">{act.count} exécutions · {act.errorRate}% erreurs</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{p.revenue}</p>
-                  <p className={`text-xs font-medium flex items-center justify-end gap-0.5 ${p.growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {p.growth >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {p.growth >= 0 ? '+' : ''}{p.growth}%
+                <div className="text-right shrink-0 ml-4">
+                  <p className={`text-sm font-semibold ${act.overSla ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    {act.avgDuration}h moy.
                   </p>
+                  <p className="text-xs text-slate-400">SLA : {act.sla}h</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Device stats + Quick objectives */}
+        {/* Process health + summary */}
         <div className="space-y-5">
-          {/* Device breakdown */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Globe className="w-4 h-4 text-slate-400" />
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Appareils</h3>
+          {/* Process performance table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-slate-400" />
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">Santé des processus</h3>
+              </div>
             </div>
-            <div className="space-y-3">
-              {deviceStats.map((d) => (
-                <div key={d.label} className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className={`w-7 h-7 ${d.color} rounded-lg flex items-center justify-center text-white shrink-0`}>
-                      <d.icon className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-sm text-slate-600 dark:text-slate-300">{d.label}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div className={`h-full ${d.color} rounded-full transition-all duration-700`} style={{ width: `${d.value}%` }} />
-                    </div>
-                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 w-8 text-right">{d.value}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick goals */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart2 className="w-4 h-4 text-slate-400" />
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Objectifs du mois</h3>
-            </div>
-            <div className="space-y-4">
-              {[
-                { label: 'Revenus', current: 84540, target: 100000, color: 'bg-indigo-500' },
-                { label: 'Nouveaux clients', current: 312, target: 400, color: 'bg-emerald-500' },
-                { label: 'Commandes', current: 5231, target: 6000, color: 'bg-amber-500' },
-              ].map((goal) => {
-                const pct = Math.round((goal.current / goal.target) * 100);
+            <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              {processHealth.map((p) => {
+                const TrendIcon = p.trend > 0 ? TrendingUp : p.trend < 0 ? TrendingDown : Activity;
+                const trendColor = p.trend > 0 ? 'text-emerald-500' : p.trend < 0 ? 'text-red-500' : 'text-slate-400';
                 return (
-                  <div key={goal.label}>
-                    <div className="flex justify-between mb-1.5">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{goal.label}</span>
-                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{pct}%</span>
+                  <div key={p.name} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{p.name}</p>
+                      <p className="text-[11px] text-slate-400">{p.instances} inst. · {p.cycleTime}j</p>
                     </div>
-                    <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div className={`h-full ${goal.color} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[10px] text-slate-400">
-                        {typeof goal.current === 'number' && goal.current > 1000
-                          ? `$${(goal.current / 1000).toFixed(1)}k`
-                          : goal.current}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        / {typeof goal.target === 'number' && goal.target > 1000
-                          ? `$${(goal.target / 1000).toFixed(0)}k`
-                          : goal.target}
-                      </span>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <div className="text-right">
+                        <p className={`text-xs font-semibold ${p.conformity >= 95 ? 'text-emerald-600' : p.conformity >= 88 ? 'text-amber-600' : 'text-red-500'}`}>
+                          {p.conformity}%
+                        </p>
+                      </div>
+                      <TrendIcon className={`w-3.5 h-3.5 ${trendColor}`} />
                     </div>
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Quick access */}
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl p-5 text-white">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/70 mb-2">Accès rapide</p>
+            <div className="space-y-2">
+              <Link to="/process-monitor" className="flex items-center gap-2 text-sm font-medium hover:text-white/80 transition-colors">
+                <Activity className="w-4 h-4" />
+                Suivi BPMN interactif
+              </Link>
+              <Link to="/advanced-analytics" className="flex items-center gap-2 text-sm font-medium hover:text-white/80 transition-colors">
+                <BarChart2 className="w-4 h-4" />
+                Analyse avancée PM4Py
+              </Link>
+              <Link to="/history" className="flex items-center gap-2 text-sm font-medium hover:text-white/80 transition-colors">
+                <Layers className="w-4 h-4" />
+                Event logs & audit
+              </Link>
             </div>
           </div>
         </div>

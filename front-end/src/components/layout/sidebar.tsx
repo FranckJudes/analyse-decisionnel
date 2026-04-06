@@ -4,18 +4,18 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   BarChart3,
-  CalendarDays,
+  Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileText,
-  Layers,
-  LifeBuoy,
+  History,
   Link as LinkIcon,
-  MessageCircle,
+  Settings,
   ShieldCheck,
   Sparkles,
   Target,
+  TrendingUp,
   Users,
   Zap,
 } from 'lucide-react';
@@ -44,30 +44,21 @@ interface NavigationGroup {
 
 const workspaceNavigation: NavigationGroup[] = [
   {
-    label: 'Pilotage BPM',
+    label: 'Main',
     items: [
-      {
-        label: 'Dashbord',
-        path: '/',
-        icon: BarChart3,
-      },
-      { label: 'Assistant analytique', path: '/ai-assistant', icon: Sparkles },
-      { label: 'Conception', path: '/conception', icon: Layers },
-      {
-        label: 'Journaux d’événements',
-        path: '/task/kanban',
-        icon: FileText,
-      },
-      { label: 'Calendrier d’exécution', path: '/calendar', icon: CalendarDays },
+      { label: 'Dashboard', path: '/', icon: BarChart3 },
+      { label: 'Tâches', path: '/task/kanban', icon: FileText },
+      { label: 'Conception', path: '/conception', icon: Building2 },
     ],
   },
   {
-    label: 'Gouvernance data-driven',
+    label: 'Administration',
     items: [
-      { label: 'Équipes & rôles', path: '/profile', icon: Users },
-      { label: 'Veille des incidents', path: '/support-ticket', icon: LifeBuoy },
-      { label: 'Mémos collaboratifs', path: '/chat', icon: MessageCircle },
-      { label: 'Paramètres décisionnels', path: '/settings', icon: ShieldCheck },
+      { label: 'Utilisateurs', path: '/users', icon: Users },
+      { label: 'Suivi des processus', path: '/process-monitor', icon: Activity },
+      { label: 'Event Logs & ETL', path: '/event-logs', icon: Zap },
+      { label: 'Simulation', path: '/simulation', icon: Target },
+      { label: 'Analyse avancée', path: '/advanced-analytics', icon: TrendingUp },
     ],
   },
 ];

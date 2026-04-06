@@ -1,0 +1,120 @@
+@startuml sequence-auth
+!pragma layout smetana
+title Séquence — Authentification & Gestion du Token JWT
+
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+skinparam sequenceParticipantBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f8fafc
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+actor       "Utilisateur"              as USER
+participant "LoginPage\n(UI React)"    as UI
+participant "userService\n(JS)"        as SVC
+participant "AuthController\n(Spring)" as CTRL
+participant "UserService\n(Spring)"    as USVC
+database    "PostgreSQL"               as DB
+participant "JwtUtils\n(Spring)"       as JWT
+participant "sessionStorage\n(Browser)"as SS
+
+== 1. Connexion ==
+
+USER -> UI : Saisit email + mot de passe\nClique "Se connecter"
+activate UI
+UI -> SVC : login({ email, password })
+activate SVC
+SVC -> CTRL : POST /api/auth/login\n{ username, password }
+activate CTRL
+CTRL -> USVC : authenticate(username, password)
+activate USVC
+USVC -> DB : SELECT * FROM users WHERE email = ?
+DB --> USVC : UserEntity
+USVC -> USVC : BCrypt.matches(password, hash)
+USVC --> CTRL : UserDetails
+deactivate USVC
+
+CTRL -> JWT : generateAccessToken(userDetails)
+activate JWT
+JWT -> JWT : sign(payload, secret, expiry=1h)
+JWT --> CTRL : accessToken (JWT)
+deactivate JWT
+
+CTRL -> JWT : generateRefreshToken()
+JWT --> CTRL : refreshToken (opaque, 7j)
+CTRL -> DB : INSERT INTO refresh_tokens
+CTRL --> SVC : { accessToken, refreshToken, user }
+deactivate CTRL
+
+SVC -> SS : sessionStorage.setItem('token', accessToken)\nsessionStorage.setItem('refreshToken', refreshToken)
+SVC --> UI : { user, token }
+deactivate SVC
+
+UI -> UI : navigate('/') — Dashboard
+UI --> USER : Accès accordé
+deactivate UI
+
+== 2. Appel API authentifié ==
+
+USER -> UI : Action nécessitant API
+activate UI
+UI -> SVC : apiFetch('/api/resource')
+activate SVC
+SVC -> SS : getItem('token')
+SS --> SVC : accessToken
+
+SVC -> CTRL : GET /api/resource\nAuthorization: Bearer <accessToken>
+activate CTRL
+CTRL -> JWT : validateToken(accessToken)
+activate JWT
+JWT -> JWT : vérifier signature + expiry
+JWT --> CTRL : valid / invalid
+deactivate JWT
+
+alt Token valide
+  CTRL --> SVC : 200 OK + données
+  SVC --> UI : données
+  UI --> USER : Résultat affiché
+else Token expiré (401)
+  CTRL --> SVC : 401 Unauthorized
+  deactivate CTRL
+  SVC -> SVC : tentative refresh…
+  SVC -> CTRL : POST /api/auth/refresh\n{ refreshToken }
+  activate CTRL
+  CTRL -> DB : SELECT refresh_token WHERE token = ?
+  DB --> CTRL : RefreshToken (valide ?)
+  CTRL -> JWT : generateAccessToken(user)
+  JWT --> CTRL : nouveau accessToken
+  CTRL --> SVC : { accessToken }
+  deactivate CTRL
+  SVC -> SS : setItem('token', nouveauToken)
+  SVC -> CTRL : Rejoue la requête initiale
+  activate CTRL
+  CTRL --> SVC : 200 OK + données
+  deactivate CTRL
+  SVC --> UI : données
+  UI --> USER : Résultat affiché
+end
+
+deactivate SVC
+deactivate UI
+
+== 3. Déconnexion ==
+
+USER -> UI : Clique "Déconnexion"
+activate UI
+UI -> SVC : logout()
+activate SVC
+SVC -> SS : removeItem('token')\nremoveItem('refreshToken')
+SVC -> CTRL : POST /api/auth/logout\n{ refreshToken }
+activate CTRL
+CTRL -> DB : DELETE FROM refresh_tokens WHERE token = ?
+CTRL --> SVC : 200 OK
+deactivate CTRL
+SVC --> UI : ok
+deactivate SVC
+UI -> UI : navigate('/login')
+UI --> USER : Redirigé vers login
+deactivate UI
+
+@enduml

@@ -1,0 +1,50 @@
+@startuml use-cases
+!pragma layout smetana
+title Cas d'Utilisation — ProcessIntel BI
+
+skinparam actorStyle awesome
+skinparam usecaseBackgroundColor #f8fafc
+skinparam usecaseBorderColor #6366f1
+skinparam arrowColor #6366f1
+skinparam actorBorderColor #334155
+skinparam packageBorderColor #cbd5e1
+
+actor "Analyste BI"     as A
+actor "Administrateur"  as ADM
+actor "Service PM4Py"   as PM  #technology
+
+package "ProcessIntel — Fonctions principales" {
+
+  usecase "Consulter le tableau de bord BI"          as UC1
+  usecase "Superviser un processus BPMN\n(overlay KPIs)"  as UC2
+  usecase "Importer et transformer\ndes event logs (ETL)" as UC3
+  usecase "Visualiser le modèle en étoile"           as UC4
+  usecase "Générer des logs simulés"                 as UC5
+  usecase "Analyser les performances\n(PM4Py)"       as UC6
+  usecase "Démarrer / déployer\nun processus"        as UC7
+  usecase "Gérer utilisateurs\net groupes"           as UC8
+  usecase "S'authentifier"                           as UC9
+  usecase "Exporter les données\n(CSV / PDF)"        as UC10
+
+}
+
+A   --> UC1
+A   --> UC2
+A   --> UC3
+A   --> UC4
+A   --> UC5
+A   --> UC6
+A   --> UC7
+A   --> UC9
+A   --> UC10
+
+ADM --> UC7
+ADM --> UC8
+ADM --> UC9
+
+PM  --> UC6
+
+UC3 ..> UC4 : <<include>>
+UC5 ..> UC2 : <<extend>>
+
+@enduml

@@ -11,10 +11,12 @@ interface WizardStep {
 interface FormWizardProps {
   steps: WizardStep[];
   onComplete?: () => void;
+  onBeforeNext?: (stepIndex: number) => Promise<boolean>;
 }
 
-export function FormWizard({ steps, onComplete }: FormWizardProps) {
+export function FormWizard({ steps, onComplete, onBeforeNext }: FormWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const totalSteps = steps.length;
   const activeStep = steps[currentStep];
   const isFirstStep = currentStep === 0;
@@ -26,10 +28,13 @@ export function FormWizard({ steps, onComplete }: FormWizardProps) {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (isSubmitting) return;
     if (isLastStep) {
       onComplete?.();
     } else {
+      const allowed = await onBeforeNext?.(currentStep);
+      if (allowed === false) return;
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps - 1));
     }
   };
@@ -109,7 +114,7 @@ export function FormWizard({ steps, onComplete }: FormWizardProps) {
           <Button variant="secondary" onClick={handlePrevious} disabled={isFirstStep}>
             Retour
           </Button>
-          <Button onClick={handleNext}>{isLastStep ? 'Finaliser' : 'Continuer'}</Button>
+          <Button onClick={handleNext} disabled={isSubmitting}>{isLastStep ? 'Finaliser' : 'Continuer'}</Button>
         </div>
       </div>
     </div>

@@ -1,0 +1,97 @@
+@startuml sequence-simulation
+!pragma layout smetana
+title Séquence — Module de Simulation de Logs Synthétiques
+
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+skinparam sequenceParticipantBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f8fafc
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+actor       "Analyste BI"           as ANALYST
+participant "SimulationPage\n(UI)"   as UI
+participant "generateLogs()\n(moteur)" as ENGINE
+participant "computeStats()"          as STATS
+participant "EventLogPage\n(UI)"     as ETL_PAGE
+
+== 1. Configuration ==
+
+ANALYST -> UI : Ouvre /simulation
+activate UI
+UI --> ANALYST : Formulaire config :\n- Processus (onboarding/réclamation/budget)\n- Nb cas (10–500)\n- Scénario (Nominal/Dégradé/Optimisé)\n- Taux d'erreur\n- Date de début
+deactivate UI
+
+ANALYST -> UI : Configure et clique "Lancer la simulation"
+activate UI
+UI -> UI : setRunning(true)
+
+== 2. Génération des logs ==
+
+UI -> ENGINE : generateLogs({ processKey, numCases,\n scenario, startDate, errorRate })
+activate ENGINE
+
+ENGINE -> ENGINE : charger template du processus\n(activités, variants, poids)
+
+note over ENGINE
+  Facteurs par scénario :
+  - Nominal  : durationFactor=1.0, errorBoost=0
+  - Dégradé  : durationFactor=2.5, errorBoost=+0.15
+  - Optimisé : durationFactor=0.55, errorBoost=-60%
+end note
+
+loop pour chaque cas (i=1..numCases)
+  ENGINE -> ENGINE : caseId = CASE-000i
+  ENGINE -> ENGINE : variant = weightedRandom(variants)\n(sélection par poids probabiliste)
+  ENGINE -> ENGINE : caseStart = startDate + i×random(6h)
+  ENGINE -> ENGINE : currentTime = caseStart
+
+  loop pour chaque activité du variant.path
+    ENGINE -> ENGINE : duration = baseDuration × durationFactor\n× jitter(±factor%)
+    ENGINE -> ENGINE : actor = random(act.actors[])
+    ENGINE -> ENGINE : isError = random() < effectiveErrorRate
+    ENGINE -> ENGINE : status = error | slow | completed
+    ENGINE -> ENGINE : logs.push({ case_id, activity,\n timestamp, actor, status,\n duration_min, variant, process })
+    ENGINE -> ENGINE : currentTime += duration
+  end
+end
+
+ENGINE --> UI : logs[] (numCases × avgActivities événements)
+deactivate ENGINE
+
+== 3. Calcul des statistiques ==
+
+UI -> STATS : computeStats(logs)
+activate STATS
+STATS -> STATS : totalEvents = logs.length
+STATS -> STATS : totalCases = unique(case_id).length
+STATS -> STATS : errorRate = errors/total × 100
+STATS -> STATS : avgDurationMin = moy(duration_min > 0)
+STATS -> STATS : variants = groupBy(variant).count()
+STATS --> UI : SimulationStats
+deactivate STATS
+
+UI -> UI : setLogs(logs)\nsetStats(stats)\nsetRunning(false)
+UI --> ANALYST : Résultats :\n- Statistiques (6 cartes KPI)\n- Distribution des variants\n- Aperçu 20 premières lignes
+deactivate UI
+
+== 4. Export CSV ==
+
+ANALYST -> UI : Clique "Exporter CSV"
+activate UI
+UI -> UI : toCSV(logs)\nBlob → URL.createObjectURL\n→ téléchargement auto
+UI --> ANALYST : simulation_onboarding_nominal_50cases.csv
+deactivate UI
+
+== 5. (Optionnel) Pipeline vers ETL ==
+
+note over ANALYST, ETL_PAGE
+  Flow futur :
+  Les logs simulés peuvent être injectés directement
+  dans EventLogPage pour construire le modèle en étoile
+  sans passer par un fichier intermédiaire.
+end note
+
+ANALYST -> ETL_PAGE : Importe le CSV exporté\ndans EventLogPage → ETL
+
+@enduml
