@@ -15,6 +15,7 @@ import { useCustomizer } from '../../context/customizer-context';
 import { useThemeClasses } from '../../hooks/useThemeClasses';
 import { ThemeSelector } from '../ui/theme-selector';
 import { cn } from '../../lib/cn';
+import { useAuth } from '../../context/AuthProvider';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -29,7 +30,8 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const { isDark, setIsDark } = useCustomizer();
-  const { getNavbarClasses, getTextClasses, getBackgroundClasses, getBorderClasses } = useThemeClasses();
+  const { getNavbarClasses } = useThemeClasses();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -42,8 +44,14 @@ export function Header({ onMenuClick }: HeaderProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const displayName = user?.email
+    ? user.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : 'Utilisateur';
+  const displayRole = user?.role ?? 'USER';
+
   const handleSignOut = () => {
     setProfileOpen(false);
+    logout();
   };
 
   return (
@@ -124,8 +132,8 @@ export function Header({ onMenuClick }: HeaderProps) {
               className="flex items-center gap-1.5 rounded-2xl px-1 py-0.5 text-left"
             >
               <div className="hidden text-right text-xs font-medium text-slate-500 dark:text-slate-300 lg:block">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">Musharof</p>
-                <p>UX • Sprint Nova</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{displayName}</p>
+                <p>{displayRole}</p>
               </div>
               <div className="relative">
                 <img
@@ -141,8 +149,8 @@ export function Header({ onMenuClick }: HeaderProps) {
             {profileOpen && (
               <div className="absolute right-4 top-full mt-3 w-60 rounded-2xl border border-slate-100 bg-white/95 p-3 text-sm shadow-2xl dark:border-white/10 dark:bg-slate-900">
                 <div className="mb-3 rounded-2xl bg-slate-50/80 px-4 py-3 dark:bg-white/5">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Clara V. · Chief Process Officer</p>
-                  <p className="text-xs text-slate-500">processintel@bpm-suite.com</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{displayName}</p>
+                  <p className="text-xs text-slate-500">{user?.email ?? ''}</p>
                 </div>
                 <div className="space-y-1">
                   {profileMenuItems.map((item) => (

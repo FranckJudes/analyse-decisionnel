@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Search, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { KanbanColumn } from './kanban-column';
 import type { Task, KanbanColumn as KanbanColumnType } from '../../types/task';
 import { useAuth } from '../../context/AuthProvider';
@@ -55,6 +56,23 @@ export function KanbanBoard() {
   };
 
   useEffect(() => { fetchTasks(); }, [user?.userId]);
+
+  const completeTask = async (taskId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/process-engine/tasks/${taskId}/complete`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success('Tâche terminée !');
+      // Move task to completed optimistically
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'completed' as const } : t));
+    } catch (err: any) {
+      toast.error(`Erreur : ${err.message}`);
+    }
+  };
 
   const filtered = tasks.filter(t => {
     const matchSearch = t.title.toLowerCase().includes(search.toLowerCase());
@@ -161,7 +179,7 @@ export function KanbanBoard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {visibleColumns.map(column => (
-            <KanbanColumn key={column.id} column={column} />
+            <KanbanColumn key={column.id} column={column} onComplete={completeTask} />
           ))}
         </div>
       )}

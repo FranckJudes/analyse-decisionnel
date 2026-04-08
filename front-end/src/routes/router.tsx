@@ -1,6 +1,8 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
 import { AppLayout } from '../components/layout';
 import { AuthLayout } from '../components/layout/auth-layout';
+import { useAuth } from '../context/AuthProvider';
+import React, { useEffect } from 'react';
 import {
   DashboardPage,
   AIAssistantPage,
@@ -29,25 +31,36 @@ import {
   UsersPage,
 } from '../pages';
 
-const rootRoute = createRootRoute({
-  component: () => {
-    const pathname = window.location.pathname;
-    const isAuthPage = pathname === '/login' || pathname === '/register';
-    
-    if (isAuthPage) {
-      return (
-        <AuthLayout>
-          <Outlet />
-        </AuthLayout>
-      );
+function RootComponent() {
+  const pathname = window.location.pathname;
+  const isAuthPage = pathname === '/login' || pathname === '/register';
+  const { isAuthenticated } = useAuth() as any;
+
+  // AuthProvider retourne null pendant le chargement, donc isAuthenticated
+  // est déjà la valeur finale au moment où ce composant se rend.
+  useEffect(() => {
+    if (!isAuthPage && !isAuthenticated) {
+      window.location.replace('/login');
     }
-    
+  }, [isAuthenticated, isAuthPage]);
+
+  if (isAuthPage) {
     return (
-      <AppLayout>
+      <AuthLayout>
         <Outlet />
-      </AppLayout>
+      </AuthLayout>
     );
-  },
+  }
+
+  return (
+    <AppLayout>
+      <Outlet />
+    </AppLayout>
+  );
+}
+
+const rootRoute = createRootRoute({
+  component: RootComponent,
 });
 
 const indexRoute = createRoute({

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useThemeClasses } from '../hooks/useThemeClasses';
 import { Link } from '@tanstack/react-router';
+
+const API_URL = import.meta.env.VITE_BASE_SERVICE_HARMONI;
 
 // ─── Mini sparkline SVG ───────────────────────────────────────────────────────
 function Sparkline({ data, color }: { data: number[]; color: string }) {
@@ -230,6 +232,82 @@ export function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'cycle' | 'volume'>('cycle');
   const printRef = useRef<HTMLDivElement>(null);
 
+  // ── Real data from API ──
+  const [liveInstances, setLiveInstances]     = useState<any[]>([]);
+  const [liveProcesses, setLiveProcesses]     = useState<any[]>([]);
+  const [dataLoaded,    setDataLoaded]         = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [instRes, procRes] = await Promise.all([
+          fetch(`${API_URL}/api/process-engine/my-process-instances`, { credentials: 'include' }),
+          fetch(`${API_URL}/api/process-engine/my-deployed-processes`, { credentials: 'include' }),
+        ]);
+        const instData = await instRes.json();
+        const procData = await procRes.json();
+        const instances: any[] = Array.isArray(instData?.data) ? instData.data
+          : Array.isArray(instData) ? instData : [];
+        const processes: any[] = Array.isArray(procData?.data) ? procData.data
+          : Array.isArray(procData) ? procData : [];
+        setLiveInstances(instances);
+        setLiveProcesses(processes);
+        setDataLoaded(true);
+      } catch {
+        setDataLoaded(true); // fallback to static data
+      }
+    };
+    load();
+  }, []);
+
+  // Computed KPIs from real data
+  const totalInst      = liveInstances.length;
+  const activeInst     = liveInstances.filter(i => !i.endTime && i.state !== 'COMPLETED').length;
+  const completedInst  = liveInstances.filter(i => !!i.endTime || i.state === 'COMPLETED').length;
+  const completionRate = totalInst > 0 ? ((completedInst / totalInst) * 100).toFixed(1) : null;
+  const durations      = liveInstances.filter(i => i.durationInMillis).map(i => Number(i.durationInMillis));
+  const avgDurationMs  = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
+  const avgDurationDays = avgDurationMs ? (avgDurationMs / 86_400_000).toFixed(1) : null;
+
+  // Real KPI cards (override static values when data loaded)
+  const liveKpiCards = kpiCards.map(k => {
+    if (!dataLoaded || totalInst === 0) return k;
+    if (k.title === 'Instances actives')
+      return { ...k, value: activeInst.toLocaleString('fr-FR') };
+    if (k.title === 'Taux de conformité' && completionRate)
+      return { ...k, value: `${completionRate}%` };
+    if (k.title === 'Temps de cycle moyen' && avgDurationDays)
+      return { ...k, value: `${avgDurationDays} j` };
+    return k;
+  });
+
+  // Real recent instances for the table
+  const liveRecentInstances = liveInstances.slice(0, 6).map(i => ({
+    id: String(i.processInstanceId ?? i.id ?? '—').slice(0, 8).toUpperCase(),
+    process: i.processName ?? i.processDefinitionKey ?? '—',
+    actor: i.startUserId ?? '—',
+    duration: i.durationInMillis
+      ? `${(i.durationInMillis / 3_600_000).toFixed(1)}h`
+      : i.endTime ? '—' : 'En cours',
+    status: i.endTime || i.state === 'COMPLETED' ? 'completed'
+      : i.state === 'SUSPENDED' ? 'error'
+      : 'active',
+    started: i.startTime
+      ? new Date(i.startTime).toLocaleDateString('fr-FR')
+      : '—',
+  }));
+
+  const displayInstances = liveRecentInstances.length > 0 ? liveRecentInstances : recentInstances;
+  const displayProcessHealth = liveProcesses.length > 0
+    ? liveProcesses.slice(0, 5).map(p => ({
+        name: p.processName ?? p.processDefinitionKey ?? '—',
+        instances: liveInstances.filter(i => i.processDefinitionKey === (p.processDefinitionKey ?? p.key)).length,
+        conformity: 100,
+        cycleTime: 0,
+        trend: 0,
+      }))
+    : processHealth;
+
   function handleExportPdf() {
     const style = document.createElement('style');
     style.id = '__pdf_print_style';
@@ -280,7 +358,7 @@ export function DashboardPage() {
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        {kpiCards.map((kpi) => (
+        {liveKpiCards.map((kpi) => (
           <div key={kpi.title} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-4">
               <div className={`w-10 h-10 ${kpi.iconBg} rounded-xl flex items-center justify-center`}>
@@ -393,7 +471,7 @@ export function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                {recentInstances.map((inst) => {
+                {displayInstances.map((inst) => {
                   const s = statusConfig[inst.status as keyof typeof statusConfig];
                   const SIcon = s.icon;
                   return (
@@ -490,7 +568,7 @@ export function DashboardPage() {
               </div>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {processHealth.map((p) => {
+              {displayProcessHealth.map((p) => {
                 const TrendIcon = p.trend > 0 ? TrendingUp : p.trend < 0 ? TrendingDown : Activity;
                 const trendColor = p.trend > 0 ? 'text-emerald-500' : p.trend < 0 ? 'text-red-500' : 'text-slate-400';
                 return (

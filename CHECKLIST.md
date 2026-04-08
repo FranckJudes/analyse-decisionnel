@@ -7,17 +7,17 @@
 ## 🔴 Critique — À implémenter avant soutenance
 
 ### Dashboard
-- [ ] Remplacer les KPIs statiques par des données réelles depuis `/api/analytics/` ou `/api/process-engine/`
-- [ ] Graphiques dynamiques (instances actives, taux de complétion, temps moyen d'exécution)
+- [x] KPIs dynamiques depuis `/api/process-engine/my-process-instances` et `my-deployed-processes`
+- [ ] Graphiques dynamiques (sparklines et barres avec vraies données historiques)
 
 ### Kanban — Tâches de processus
-- [ ] Bouton "Terminer la tâche" qui appelle `POST /api/process-engine/tasks/{id}/complete`
-- [ ] Mise à jour optimiste de la colonne après complétion
+- [x] Bouton "Terminer la tâche" → `POST /api/process-engine/tasks/{id}/complete`
+- [x] Mise à jour optimiste de la colonne après complétion (toast + déplacement vers "Terminé")
 
 ### Process Monitor
-- [ ] Afficher le BPMN live depuis Camunda (processus déployés réels)
-- [ ] Surligner les tâches actives en temps réel via les instances Camunda
-- [ ] Remplacer le mode démo par les vraies données
+- [x] Auto-démarrage en mode live (essaie le backend, fallback démo si indispo)
+- [x] Affiche le BPMN réel depuis Camunda + overlay KPIs sur les activités
+- [ ] Surligner les tâches **actives en cours** en temps réel (polling instances)
 
 ### New Process — Étape 3 (Configuration)
 - [ ] Envoyer les habilitations et assignees au backend (actuellement `configurations=[]`)
@@ -36,8 +36,8 @@
 ## 🟡 Fonctionnel — Implémenté mais incomplet
 
 ### Auth & Sécurité
-- [ ] Route guard — rediriger vers `/login` si non authentifié
-- [ ] Header — afficher le vrai nom et rôle de l'utilisateur connecté (actuellement "Musharof" hardcodé)
+- [x] Route guard — redirige vers `/login` si non authentifié (AuthProvider dans App.jsx, guard dans rootRoute)
+- [x] Header — vrai nom/rôle depuis `useAuth()` (email → prénom capitalisé + rôle)
 - [ ] Register — vérifier que le formulaire appelle bien le bon endpoint
 
 ### Conception / Processus

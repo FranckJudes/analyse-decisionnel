@@ -286,10 +286,10 @@ export function ProcessMonitorPage() {
     }
   }, [mode, selectedKey, startDate, endDate, sharedLogs]);
 
-  // Init : démo par défaut
+  // Init : essayer live d'abord, fallback démo automatique si backend indispo
   useEffect(() => {
     if (sharedLogs?.length > 0) return; // logs partagés prioritaires
-    loadDemo();
+    loadLive();
   }, []);
 
   const activityRows = Object.entries(kpiData)

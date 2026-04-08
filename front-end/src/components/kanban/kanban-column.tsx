@@ -5,9 +5,10 @@ import type { KanbanColumn as KanbanColumnType } from '../../types/task';
 
 interface KanbanColumnProps {
   column: KanbanColumnType;
+  onComplete?: (taskId: string) => Promise<void>;
 }
 
-export function KanbanColumn({ column }: KanbanColumnProps) {
+export function KanbanColumn({ column, onComplete }: KanbanColumnProps) {
   const getBadgeColor = (status: string) => {
     switch (status) {
       case 'todo':
@@ -40,7 +41,7 @@ export function KanbanColumn({ column }: KanbanColumnProps) {
       </div>
       <div className="flex flex-col gap-4">
         {column.tasks.map((task) => (
-          <TaskCard key={task.id} task={task} />
+          <TaskCard key={task.id} task={task} onComplete={onComplete} />
         ))}
       </div>
     </div>
