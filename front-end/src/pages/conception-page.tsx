@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
   Play, RefreshCw, Loader2, AlertCircle, Layers, CheckCircle,
-  Clock, ChevronDown, ChevronUp, ExternalLink,
+  Clock, ChevronDown, ChevronUp, ExternalLink, Trash2,
 } from 'lucide-react';
 import ConceptionService from '../services/conceptionService';
 import toast from 'react-hot-toast';
@@ -85,6 +85,7 @@ export function ConceptionPage() {
   const [instances, setInstances]   = useState<ProcessInstance[]>([]);
   const [loading, setLoading]       = useState(true);
   const [launching, setLaunching]   = useState<string | null>(null);
+  const [deleting, setDeleting]     = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -93,8 +94,27 @@ export function ConceptionPage() {
         ConceptionService.getDeployedProcesses().catch(() => []),
         ConceptionService.getAllInstances().catch(() => []),
       ]);
-      setProcesses(Array.isArray(procs) ? procs : []);
-      setInstances(Array.isArray(insts) ? insts : []);
+      // Normalise les champs backend → interface locale
+      const normalizedProcs = (Array.isArray(procs) ? procs : []).map((p: any) => ({
+        id: p.id ?? p.processDefinitionId ?? String(Math.random()),
+        key: p.key ?? p.processDefinitionKey ?? p.processDefinitionId ?? 'unknown',
+        name: p.name ?? p.processName ?? p.processDefinitionKey ?? 'Sans nom',
+        version: p.version ?? 1,
+        deploymentId: p.deploymentId,
+        resource: p.resource,
+        deployedAt: p.deployedAt,
+      }));
+      setProcesses(normalizedProcs);
+      // Normalise les instances : id doit être une string
+      const normalizedInsts = (Array.isArray(insts) ? insts : []).map((i: any) => ({
+        id: String(i.processInstanceId ?? i.id ?? Math.random()),
+        processDefinitionKey: i.processDefinitionKey,
+        processDefinitionId: i.processDefinitionId,
+        startTime: i.startTime,
+        state: i.state,
+        businessKey: i.businessKey,
+      }));
+      setInstances(normalizedInsts);
     } catch {
       toast.error('Impossible de charger les processus.');
     } finally {
@@ -103,6 +123,20 @@ export function ConceptionPage() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  async function handleDelete(proc: DeployedProcess) {
+    if (!window.confirm(`Supprimer le processus "${proc.name}" ? Cette action est irréversible.`)) return;
+    setDeleting(proc.key);
+    try {
+      await ConceptionService.deleteProcess(proc.key);
+      setProcesses(prev => prev.filter(p => p.key !== proc.key));
+      toast.success(`Processus "${proc.name}" supprimé.`);
+    } catch {
+      toast.error(`Erreur lors de la suppression de "${proc.name}".`);
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   async function handleLaunch(proc: DeployedProcess) {
     setLaunching(proc.key);
@@ -263,6 +297,16 @@ export function ConceptionPage() {
                           <ExternalLink className="w-3 h-3" />
                           Suivre
                         </Link>
+                        <button
+                          onClick={() => handleDelete(proc)}
+                          disabled={deleting === proc.key}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
+                        >
+                          {deleting === proc.key
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <Trash2 className="w-3 h-3" />}
+                          Supprimer
+                        </button>
                       </div>
                     </td>
                   </tr>

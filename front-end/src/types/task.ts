@@ -1,6 +1,6 @@
 export type TaskStatus = 'todo' | 'in-progress' | 'completed';
 
-export type TaskCategory = 'Marketing' | 'Development' | 'Dev' | 'Template';
+export type TaskCategory = string;
 
 export interface Task {
   id: string;
@@ -13,6 +13,7 @@ export interface Task {
   attachments?: number;
   hasImage?: boolean;
   description?: string;
+  processInstanceId?: string;
 }
 
 export interface KanbanColumn {

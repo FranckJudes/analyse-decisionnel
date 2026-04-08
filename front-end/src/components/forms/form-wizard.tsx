@@ -10,11 +10,12 @@ interface WizardStep {
 
 interface FormWizardProps {
   steps: WizardStep[];
-  onComplete?: () => void;
+  onComplete?: () => void | Promise<void>;
   onBeforeNext?: (stepIndex: number) => Promise<boolean>;
+  completeLabel?: string;
 }
 
-export function FormWizard({ steps, onComplete, onBeforeNext }: FormWizardProps) {
+export function FormWizard({ steps, onComplete, onBeforeNext, completeLabel = 'Sauvegarder et déployer' }: FormWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const totalSteps = steps.length;
@@ -31,7 +32,12 @@ export function FormWizard({ steps, onComplete, onBeforeNext }: FormWizardProps)
   const handleNext = async () => {
     if (isSubmitting) return;
     if (isLastStep) {
-      onComplete?.();
+      setIsSubmitting(true);
+      try {
+        await onComplete?.();
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       const allowed = await onBeforeNext?.(currentStep);
       if (allowed === false) return;
@@ -114,7 +120,9 @@ export function FormWizard({ steps, onComplete, onBeforeNext }: FormWizardProps)
           <Button variant="secondary" onClick={handlePrevious} disabled={isFirstStep}>
             Retour
           </Button>
-          <Button onClick={handleNext} disabled={isSubmitting}>{isLastStep ? 'Finaliser' : 'Continuer'}</Button>
+          <Button onClick={handleNext} disabled={isSubmitting}>
+            {isLastStep ? (isSubmitting ? 'Déploiement…' : completeLabel) : 'Continuer'}
+          </Button>
         </div>
       </div>
     </div>

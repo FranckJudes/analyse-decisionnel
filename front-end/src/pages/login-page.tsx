@@ -8,10 +8,32 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login:', { email, password, rememberMe });
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('http://localhost:8200/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError(data.message || 'Email ou mot de passe incorrect');
+        return;
+      }
+      // Cookie set automatically by browser, redirect to dashboard
+      window.location.href = '/';
+    } catch {
+      setError('Impossible de contacter le serveur');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -101,8 +123,14 @@ export function LoginPage() {
           </a>
         </div>
 
-        <Button type="submit" className="w-full">
-          Sign In
+        {error && (
+          <div className="rounded-lg bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? 'Connexion...' : 'Sign In'}
         </Button>
       </form>
 

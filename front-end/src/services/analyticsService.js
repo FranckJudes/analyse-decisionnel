@@ -1,26 +1,18 @@
 const API_URL = import.meta.env.VITE_BASE_SERVICE_HARMONI;
 
-function getAuthHeaders() {
-  const token = sessionStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 async function apiFetch(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { ...getAuthHeaders(), ...(options.headers || {}) },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
-  if (response.status === 401) {
-    sessionStorage.removeItem('token');
-    window.location.href = '/login';
-  }
   if (!response.ok) throw new Error(await response.text());
   if (response.status === 204) return null;
   const data = await response.json();
   if (data && typeof data === 'object' && 'success' in data && data.success === true && 'data' in data) {
+    return data.data;
+  }
+  if (data && typeof data === 'object' && 'data' in data && !('success' in data)) {
     return data.data;
   }
   return data;
@@ -84,14 +76,48 @@ export const AnalyticsService = {
     if (processDefinitionId) params.append('processDefinitionId', processDefinitionId);
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
-    const token = sessionStorage.getItem('token');
+    params.append('type', 'logs');
     const url = `${API_URL}/api/analytics/export/csv?${params.toString()}`;
-    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    return fetch(url, { credentials: 'include' })
       .then((res) => res.blob())
       .then((blob) => {
         const link = document.createElement('a');
         link.href = window.URL.createObjectURL(blob);
         link.download = 'process_logs.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+  },
+
+  exportStarSchemaCsv: (type) => {
+    const url = `${API_URL}/api/analytics/export/csv?type=${encodeURIComponent(type)}`;
+    return fetch(url, { credentials: 'include' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = `${type}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+  },
+
+  exportStarSchemaExcel: () => {
+    const url = `${API_URL}/api/analytics/export/excel`;
+    return fetch(url, { credentials: 'include' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = 'power_bi_star_schema.xlsx';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

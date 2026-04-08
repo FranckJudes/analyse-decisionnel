@@ -44,7 +44,6 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   const handleSignOut = () => {
     setProfileOpen(false);
-    window.location.href = '/login';
   };
 
   return (

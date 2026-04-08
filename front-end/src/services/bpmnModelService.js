@@ -1,23 +1,22 @@
 const API_URL = import.meta.env.VITE_BASE_SERVICE_HARMONI;
 
-function getAuthHeaders(contentType = 'application/json') {
-  const token = sessionStorage.getItem('token');
-  const headers = {};
-  if (contentType) headers['Content-Type'] = contentType;
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
-
 async function apiFetch(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, options);
-  if (response.status === 401) {
-    sessionStorage.removeItem('token');
-    window.location.href = '/login';
-  }
+  // If options.headers is explicitly set to null, skip default Content-Type (for multipart)
+  const headers = options.headers === null
+    ? {}
+    : { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const response = await fetch(path, {
+    ...options,
+    credentials: 'include',
+    headers,
+  });
   if (!response.ok) throw new Error(await response.text());
   if (response.status === 204) return null;
   const data = await response.json();
   if (data && typeof data === 'object' && 'success' in data && data.success === true && 'data' in data) {
+    return data.data;
+  }
+  if (data && typeof data === 'object' && 'data' in data && !('success' in data)) {
     return data.data;
   }
   return data;
@@ -25,47 +24,35 @@ async function apiFetch(path, options = {}) {
 
 const BpmnModelService = {
   getDeployedProcesses: () =>
-    apiFetch(`${API_URL}/bpmn/deployed-processes`, {
-      headers: getAuthHeaders(null),
-    }),
+    apiFetch(`${API_URL}/bpmn/deployed-processes`),
 
   checkDeploymentStatus: (processKey) =>
-    apiFetch(`${API_URL}/bpmn/check-deployment/${processKey}`, {
-      headers: getAuthHeaders(null),
-    }),
+    apiFetch(`${API_URL}/bpmn/check-deployment/${processKey}`),
 
   startProcessInstance: (processKey) =>
     apiFetch(`${API_URL}/bpmn/start-process/${processKey}`, {
       method: 'POST',
-      headers: getAuthHeaders(),
     }),
 
   getMyDeployedProcesses: () =>
-    apiFetch(`${API_URL}/api/process-engine/my-deployed-processes`, {
-      headers: getAuthHeaders(null),
-    }),
+    apiFetch(`${API_URL}/api/process-engine/my-deployed-processes`),
 
   getMyProcessInstances: () =>
-    apiFetch(`${API_URL}/api/process-engine/my-process-instances`, {
-      headers: getAuthHeaders(null),
-    }),
+    apiFetch(`${API_URL}/api/process-engine/my-process-instances`),
 
   getBpmnModel: (bpmnId) =>
-    apiFetch(`${API_URL}/bpmn/${bpmnId}`, {
-      headers: getAuthHeaders(null),
-    }),
+    apiFetch(`${API_URL}/bpmn/${bpmnId}`),
 
   uploadBpmnModel: (formData) =>
     apiFetch(`${API_URL}/bpmn/upload`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      headers: null,
       body: formData,
     }),
 
   startProcessInstanceViaEngine: (processDefinitionKey, variables = {}) =>
     apiFetch(`${API_URL}/api/process-engine/start/${processDefinitionKey}`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify(variables),
     }),
 };

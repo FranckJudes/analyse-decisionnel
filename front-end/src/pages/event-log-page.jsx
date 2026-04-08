@@ -26,7 +26,10 @@ import {
   FileText,
   Play,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import AnalyticsService from '../services/analyticsService';
 
 // ─── ETL helpers ──────────────────────────────────────────────────────────────
 
@@ -398,22 +401,36 @@ export function EventLogPage() {
     <div className="flex-1 overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6 space-y-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Event Logs & ETL</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Importez vos logs de processus, transformez-les et visualisez le modèle en étoile
           </p>
         </div>
-        {schema && (
+        <div className="flex items-center gap-2">
+          {schema && (
+            <button
+              onClick={exportFacts}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Exporter faits CSV
+            </button>
+          )}
           <button
-            onClick={exportFacts}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            onClick={() => {
+              const tid = toast.loading('Export Excel Power BI en cours…');
+              AnalyticsService.exportStarSchemaExcel()
+                .then(() => toast.success('Fichier power_bi_star_schema.xlsx téléchargé', { id: tid }))
+                .catch((err) => toast.error(`Erreur export: ${err.message}`, { id: tid }));
+            }}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
           >
-            <Download className="w-4 h-4" />
-            Exporter faits CSV
+            <FileSpreadsheet className="w-4 h-4" />
+            Exporter vers Power BI
           </button>
-        )}
+        </div>
       </div>
 
       {/* Tabs */}

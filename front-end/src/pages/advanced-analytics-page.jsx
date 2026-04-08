@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
   Network, BarChart2, Clock, Zap, Users, RefreshCw,
-  Home, ChevronRight, TrendingUp, AlertTriangle, Play
+  Home, ChevronRight, TrendingUp, AlertTriangle, Play, FileSpreadsheet
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -365,6 +365,18 @@ export function AdvancedAnalyticsPage() {
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 {loading ? 'Analyse en cours...' : "Exécuter l'analyse"}
               </Button>
+              <button
+                onClick={() => {
+                  const tid = toast.loading('Export Excel Power BI en cours…');
+                  AnalyticsService.exportStarSchemaExcel()
+                    .then(() => toast.success('Fichier power_bi_star_schema.xlsx téléchargé', { id: tid }))
+                    .catch((err) => toast.error(`Erreur export: ${err.message}`, { id: tid }));
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Exporter vers Power BI
+              </button>
             </div>
           </CardContent>
         </Card>

@@ -813,19 +813,16 @@ export function NewProcessPage() {
   const handleBeforeNext = async (stepIndex: number): Promise<boolean> => {
     if (stepIndex === 1) {
       const blob = await step2Ref.current?.exportBpmn();
-      if (!blob) {
-        toast.error('Impossible d\'exporter le diagramme BPMN.');
-        return false;
-      }
-      const bpmnXml = await blob.text();
-      try {
-        await ConceptionService.uploadBpmn(bpmnXml);
-        setBpmnXml(bpmnXml);
-        toast.success('BPMN envoyé au serveur.');
-        return true;
-      } catch (err) {
-        toast.error('Erreur lors de l\'envoi du BPMN.');
-        return false;
+      if (blob) {
+        const xml = await blob.text();
+        setBpmnXml(xml);
+        try {
+          await ConceptionService.uploadBpmn(xml);
+          toast.success('BPMN envoyé au serveur.');
+        } catch {
+          // Ne pas bloquer la navigation si le backend est indisponible
+          toast.error('Avertissement : BPMN non envoyé au serveur, mais vous pouvez continuer.');
+        }
       }
     }
     return true;
@@ -1123,12 +1120,25 @@ export function NewProcessPage() {
         steps={steps}
         onBeforeNext={handleBeforeNext}
         onComplete={async () => {
-          if (!processName.trim()) {
-            toast.error('Veuillez renseigner le nom du processus (étape 1).');
+          const name = processName.trim() || 'Processus sans nom';
+          if (!bpmnXml) {
+            toast.error('Aucun diagramme BPMN. Revenez à l\'étape 2 pour modéliser le processus.');
             return;
           }
-          toast.success(`Processus "${processName}" configuré et déployé.`);
-          navigate({ to: '/conception' });
+          const loadingToast = toast.loading('Déploiement en cours…');
+          try {
+            await ConceptionService.deployProcess({
+              bpmnXml,
+              processName: name,
+              processDescription,
+            });
+            toast.dismiss(loadingToast);
+            toast.success(`Processus "${name}" déployé avec succès !`);
+            navigate({ to: '/conception' });
+          } catch (err: any) {
+            toast.dismiss(loadingToast);
+            toast.error(`Erreur lors du déploiement : ${err?.message ?? 'Erreur inconnue'}`);
+          }
         }}
       />
     </div>
