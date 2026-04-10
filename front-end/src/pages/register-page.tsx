@@ -3,6 +3,8 @@ import { Link } from '@tanstack/react-router';
 import { Mail, Lock, User, Eye, EyeOff, Check, Workflow, Compass, Layers } from 'lucide-react';
 import { Button, Input } from '../components/ui';
 
+const API_URL = import.meta.env.VITE_BASE_SERVICE_HARMONI || 'http://localhost:8200';
+
 export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -13,6 +15,8 @@ export function RegisterPage() {
     confirmPassword: '',
   });
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const passwordRequirements = [
     { label: 'At least 8 characters', met: formData.password.length >= 8 },
@@ -21,9 +25,37 @@ export function RegisterPage() {
     { label: 'One number', met: /\d/.test(formData.password) },
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Register:', formData);
+    if (formData.password !== formData.confirmPassword) {
+      setError('Les mots de passe ne correspondent pas');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/api/auth/register`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError(data.message || "Erreur lors de l'inscription");
+        return;
+      }
+      window.location.href = '/';
+    } catch {
+      setError('Impossible de contacter le serveur');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -155,8 +187,14 @@ export function RegisterPage() {
           </span>
         </label>
 
-        <Button type="submit" className="w-full" disabled={!agreeTerms}>
-          Launch workspace
+        {error && (
+          <div className="rounded-lg bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
+        <Button type="submit" className="w-full" disabled={!agreeTerms || loading}>
+          {loading ? 'Inscription...' : 'Launch workspace'}
         </Button>
       </form>
 

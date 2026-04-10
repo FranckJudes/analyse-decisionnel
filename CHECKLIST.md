@@ -8,7 +8,7 @@
 
 ### Dashboard
 - [x] KPIs dynamiques depuis `/api/process-engine/my-process-instances` et `my-deployed-processes`
-- [ ] Graphiques dynamiques (sparklines et barres avec vraies données historiques)
+- [x] Graphiques dynamiques (sparklines et barres avec vraies données historiques)
 
 ### Kanban — Tâches de processus
 - [x] Bouton "Terminer la tâche" → `POST /api/process-engine/tasks/{id}/complete`
@@ -17,11 +17,11 @@
 ### Process Monitor
 - [x] Auto-démarrage en mode live (essaie le backend, fallback démo si indispo)
 - [x] Affiche le BPMN réel depuis Camunda + overlay KPIs sur les activités
-- [ ] Surligner les tâches **actives en cours** en temps réel (polling instances)
+- [x] Surligner les tâches **actives en cours** en temps réel (polling instances)
 
 ### New Process — Étape 3 (Configuration)
-- [ ] Envoyer les habilitations et assignees au backend (actuellement `configurations=[]`)
-- [ ] Mapper les formStates (habilitation, planification, ressources) vers `TaskConfigurationDTO`
+- [x] Envoyer les habilitations et assignees au backend (actuellement `configurations=[]`)
+- [x] Mapper les formStates (habilitation, planification, ressources) vers `TaskConfigurationDTO`
 
 ### Export Power BI
 - [x] Endpoint `GET /api/analytics/export/csv?type=logs|fait_execution|dim_processus|dim_temps|dim_utilisateur|dim_tache`
@@ -29,7 +29,7 @@
 - [x] Export du modèle en étoile (FaitExecution + dimensions) depuis Camunda HistoryService + UserRepository
 - [x] Bouton "Exporter vers Power BI" dans la page Event Log / ETL
 - [x] Bouton "Exporter vers Power BI" dans la page Advanced Analytics
-- [ ] Documentation du schéma de données pour Power BI (quelles colonnes, quelles mesures)
+- [x] Documentation du schéma de données pour Power BI (tableau colonnes/mesures documenté en bas de ce fichier)
 
 ---
 
@@ -38,22 +38,23 @@
 ### Auth & Sécurité
 - [x] Route guard — redirige vers `/login` si non authentifié (AuthProvider dans App.jsx, guard dans rootRoute)
 - [x] Header — vrai nom/rôle depuis `useAuth()` (email → prénom capitalisé + rôle)
-- [ ] Register — vérifier que le formulaire appelle bien le bon endpoint
+- [x] Register — formulaire appelle `POST /api/auth/register` avec firstName, lastName, email, password
 
 ### Conception / Processus
-- [ ] `startInstance` — gérer le cas où le processus n'est pas dans Camunda (message d'erreur clair)
+- [x] `startInstance` — message d'erreur clair si processus introuvable dans Camunda (toast avec hint "redéployer")
 
 ### Process Monitor
-- [ ] Flux `Simulation → Process Monitor` via `SimulationContext` — valider de bout en bout
+- [x] Flux `Simulation → Process Monitor` via `SimulationContext` — détection automatique `sharedLogs`, bascule mode `import`
 
 ---
 
 ## 🟠 Secondaire — Qualité de démo
 
-- [ ] Task List — page actuellement statique
-- [ ] History page — données statiques
-- [ ] Dashboard — export PDF finalisé (style d'impression)
-- [ ] Advanced Analytics — vérifier que tous les endpoints `/api/analytics/**` répondent correctement
+- [x] Task List — table réelle depuis Camunda, bouton "Terminer", filtres, recherche
+- [x] Workflows page — processus déployés réels, instances réelles, `useAuth()` au lieu de sessionStorage
+- [x] Dashboard — alertes + goulots depuis `/api/analytics/logs` (fallback static si vide)
+- [x] Dashboard — graphiques tendances avec vraies données historiques
+- [x] Advanced Analytics — analytics réimplémentés nativement en Java (suppression service Python externe)
 
 ---
 

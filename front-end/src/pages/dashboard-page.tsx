@@ -260,6 +260,49 @@ export function DashboardPage() {
     load();
   }, []);
 
+  // Fetch real event logs for alerts + bottlenecks
+  const [liveAlerts,      setLiveAlerts]      = useState<any[]>([]);
+  const [liveBottlenecks, setLiveBottlenecks] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/analytics/logs`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        const list: any[] = Array.isArray(data?.data) ? data.data
+          : Array.isArray(data) ? data : [];
+        if (list.length === 0) return;
+
+        // Build alerts from last 6 events
+        const alerts = list.slice(-6).reverse().map((log: any) => ({
+          icon: Activity,
+          color: 'bg-indigo-500',
+          text: `Activité "${log.activityName ?? log.activityId ?? '—'}" sur processus "${log.processDefinitionKey ?? '—'}"`,
+          time: log.startTime ? new Date(log.startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—',
+        }));
+        setLiveAlerts(alerts);
+
+        // Build bottlenecks: group by activity, compute avg duration
+        const byActivity: Record<string, { durations: number[]; count: number }> = {};
+        for (const log of list) {
+          const id = log.activityName ?? log.activityId ?? '?';
+          if (!byActivity[id]) byActivity[id] = { durations: [], count: 0 };
+          if (log.durationInMillis) byActivity[id].durations.push(Number(log.durationInMillis));
+          byActivity[id].count++;
+        }
+        const bottlenecks = Object.entries(byActivity)
+          .map(([name, d]) => {
+            const avg = d.durations.length
+              ? d.durations.reduce((a, b) => a + b, 0) / d.durations.length / 3600000
+              : 0;
+            return { name, avgDuration: Number(avg.toFixed(1)), sla: 8, overSla: avg > 8, count: d.count, errorRate: 0 };
+          })
+          .sort((a, b) => b.avgDuration - a.avgDuration)
+          .slice(0, 5);
+        setLiveBottlenecks(bottlenecks);
+      })
+      .catch(() => {});
+  }, []);
+
   // Computed KPIs from real data
   const totalInst      = liveInstances.length;
   const activeInst     = liveInstances.filter(i => !i.endTime && i.state !== 'COMPLETED').length;
@@ -269,15 +312,99 @@ export function DashboardPage() {
   const avgDurationMs  = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
   const avgDurationDays = avgDurationMs ? (avgDurationMs / 86_400_000).toFixed(1) : null;
 
-  // Real KPI cards (override static values when data loaded)
+  // ── Dynamic trend charts from real instance data ──────────────────────────
+  const monthLabels = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const dayMs = 86_400_000;
+  const sparklineWindow = 10;
+  const nowTs = Date.now();
+
+  // Group instances by month for bar charts
+  const byMonth: Record<string, { count: number; totalMs: number; durationCount: number }> = {};
+  for (const inst of liveInstances) {
+    if (!inst.startTime) continue;
+    const d = new Date(inst.startTime);
+    const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+    if (!byMonth[key]) byMonth[key] = { count: 0, totalMs: 0, durationCount: 0 };
+    byMonth[key].count++;
+    if (inst.durationInMillis) {
+      byMonth[key].totalMs += Number(inst.durationInMillis);
+      byMonth[key].durationCount++;
+    }
+  }
+  const sortedMonths = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).slice(-12);
+  const computedVolumeTrend = sortedMonths.map(([key, v]) => ({
+    label: monthLabels[Number(key.split('-')[1])],
+    value: v.count,
+  }));
+  const computedCycleTrend = sortedMonths.map(([key, v]) => ({
+    label: monthLabels[Number(key.split('-')[1])],
+    value: v.durationCount > 0 ? Number((v.totalMs / v.durationCount / dayMs).toFixed(1)) : 0,
+  }));
+
+  const displayCycleTrend  = computedCycleTrend.length  >= 2 ? computedCycleTrend  : cycleTrend;
+  const displayVolumeTrend = computedVolumeTrend.length >= 2 ? computedVolumeTrend : volumeTrend;
+
+  const latestCycleValue  = computedCycleTrend.length  > 0 ? `${computedCycleTrend[computedCycleTrend.length - 1].value} jours`     : '3.2 jours';
+  const latestVolumeValue = computedVolumeTrend.length > 0 ? `${computedVolumeTrend[computedVolumeTrend.length - 1].value} instances` : '1 284 instances';
+  const trendDateLabel    = computedVolumeTrend.length >= 2
+    ? `${computedVolumeTrend[0].label} – ${computedVolumeTrend[computedVolumeTrend.length - 1].label} · données réelles`
+    : 'Janvier – Décembre 2025';
+
+  // Sparklines: last 10 days buckets
+  const dayBuckets = Array.from({ length: sparklineWindow }, (_, i) => nowTs - (sparklineWindow - 1 - i) * dayMs);
+  const hasSparkData = liveInstances.some(i => i.startTime);
+
+  const volumeSparkline = dayBuckets.map(dayStart =>
+    liveInstances.filter(inst => {
+      if (!inst.startTime) return false;
+      const t = new Date(inst.startTime).getTime();
+      return t >= dayStart && t < dayStart + dayMs;
+    }).length
+  );
+
+  const conformitySparkline = dayBuckets.map(dayStart => {
+    const dayInsts = liveInstances.filter(inst => {
+      if (!inst.startTime) return false;
+      const t = new Date(inst.startTime).getTime();
+      return t >= dayStart && t < dayStart + dayMs;
+    });
+    if (dayInsts.length === 0) return 100;
+    const completed = dayInsts.filter(i => !!i.endTime || i.state === 'COMPLETED').length;
+    return Number(((completed / dayInsts.length) * 100).toFixed(1));
+  });
+
+  const cycleSparkline = dayBuckets.map(dayStart => {
+    const dayInsts = liveInstances.filter(inst => {
+      if (!inst.startTime) return false;
+      const t = new Date(inst.startTime).getTime();
+      return t >= dayStart && t < dayStart + dayMs && inst.durationInMillis;
+    });
+    if (dayInsts.length === 0) return 0;
+    return Number((dayInsts.reduce((s, i) => s + Number(i.durationInMillis), 0) / dayInsts.length / dayMs).toFixed(2));
+  });
+
+  const errorSparkline = dayBuckets.map(dayStart => {
+    const dayInsts = liveInstances.filter(inst => {
+      if (!inst.startTime) return false;
+      const t = new Date(inst.startTime).getTime();
+      return t >= dayStart && t < dayStart + dayMs;
+    });
+    if (dayInsts.length === 0) return 0;
+    const errors = dayInsts.filter(i => i.state === 'SUSPENDED' || i.state === 'EXTERNALLY_TERMINATED').length;
+    return Number(((errors / dayInsts.length) * 100).toFixed(1));
+  });
+
+  // Real KPI cards (override static values + sparklines when data loaded)
   const liveKpiCards = kpiCards.map(k => {
     if (!dataLoaded || totalInst === 0) return k;
     if (k.title === 'Instances actives')
-      return { ...k, value: activeInst.toLocaleString('fr-FR') };
+      return { ...k, value: activeInst.toLocaleString('fr-FR'), sparkline: hasSparkData && volumeSparkline.some(v => v > 0) ? volumeSparkline : k.sparkline };
     if (k.title === 'Taux de conformité' && completionRate)
-      return { ...k, value: `${completionRate}%` };
+      return { ...k, value: `${completionRate}%`, sparkline: hasSparkData && conformitySparkline.some(v => v > 0) ? conformitySparkline : k.sparkline };
     if (k.title === 'Temps de cycle moyen' && avgDurationDays)
-      return { ...k, value: `${avgDurationDays} j` };
+      return { ...k, value: `${avgDurationDays} j`, sparkline: hasSparkData && cycleSparkline.some(v => v > 0) ? cycleSparkline : k.sparkline };
+    if (k.title === "Taux d'erreur")
+      return { ...k, sparkline: hasSparkData && errorSparkline.some(v => v > 0) ? errorSparkline : k.sparkline };
     return k;
   });
 
@@ -384,7 +511,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900 dark:text-white">Tendances des processus</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Janvier – Décembre 2025</p>
+              <p className="text-xs text-slate-400 mt-0.5">{trendDateLabel}</p>
             </div>
             <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5 gap-0.5">
               {(['cycle', 'volume'] as const).map((t) => (
@@ -403,15 +530,43 @@ export function DashboardPage() {
           </div>
           <div className="flex items-end justify-between gap-1 mb-2">
             <span className="text-2xl font-bold text-slate-900 dark:text-white">
-              {activeTab === 'cycle' ? '3.2 jours' : '1 284 instances'}
+              {activeTab === 'cycle' ? latestCycleValue : latestVolumeValue}
             </span>
-            <span className="text-xs text-emerald-500 flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5" />
-              {activeTab === 'cycle' ? '-10% vs an dernier' : '+31% vs an dernier'}
-            </span>
+            {computedCycleTrend.length >= 2 && activeTab === 'cycle' && (() => {
+              const first = computedCycleTrend[0].value;
+              const last  = computedCycleTrend[computedCycleTrend.length - 1].value;
+              const pct   = first > 0 ? (((last - first) / first) * 100).toFixed(0) : null;
+              return pct ? (
+                <span className={`text-xs flex items-center gap-1 ${Number(pct) <= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {Number(pct) <= 0 ? <TrendingDown className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
+                  {Number(pct) > 0 ? '+' : ''}{pct}% sur la période
+                </span>
+              ) : null;
+            })()}
+            {computedVolumeTrend.length >= 2 && activeTab === 'volume' && (() => {
+              const first = computedVolumeTrend[0].value;
+              const last  = computedVolumeTrend[computedVolumeTrend.length - 1].value;
+              const pct   = first > 0 ? (((last - first) / first) * 100).toFixed(0) : null;
+              return pct ? (
+                <span className={`text-xs flex items-center gap-1 ${Number(pct) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {Number(pct) >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                  {Number(pct) > 0 ? '+' : ''}{pct}% sur la période
+                </span>
+              ) : null;
+            })()}
+            {(computedCycleTrend.length < 2 && activeTab === 'cycle') && (
+              <span className="text-xs text-emerald-500 flex items-center gap-1">
+                <TrendingUp className="w-3.5 h-3.5" />-10% vs an dernier
+              </span>
+            )}
+            {(computedVolumeTrend.length < 2 && activeTab === 'volume') && (
+              <span className="text-xs text-emerald-500 flex items-center gap-1">
+                <TrendingUp className="w-3.5 h-3.5" />+31% vs an dernier
+              </span>
+            )}
           </div>
           <BarChart
-            data={activeTab === 'cycle' ? cycleTrend : volumeTrend}
+            data={activeTab === 'cycle' ? displayCycleTrend : displayVolumeTrend}
             color={activeTab === 'cycle' ? '#6366f1' : '#10b981'}
           />
         </div>
@@ -422,28 +577,45 @@ export function DashboardPage() {
             <h3 className="text-base font-semibold text-slate-900 dark:text-white">Conformité BPMN</h3>
             <CheckCircle className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="flex items-center justify-center mb-4">
-            <DonutChart segments={conformitySegments} centerLabel="94.7%" />
-          </div>
-          <div className="space-y-2.5">
-            {conformitySegments.map((seg) => (
-              <div key={seg.label} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: seg.color }} />
-                  <span className="text-sm text-slate-600 dark:text-slate-300">{seg.label}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-20 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{
-                      width: `${(seg.value / conformitySegments.reduce((a, s) => a + s.value, 0)) * 100}%`,
-                      background: seg.color
-                    }} />
-                  </div>
-                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 w-8 text-right">{seg.value}</span>
-                </div>
+          {(() => {
+            const liveConformitySegments = (dataLoaded && totalInst > 0) ? [
+              { label: 'Conforme',         value: completedInst,                   color: '#10b981' },
+              { label: 'En cours',         value: activeInst,                      color: '#6366f1' },
+              { label: 'Non-conforme',     value: Math.max(0, totalInst - completedInst - activeInst), color: '#ef4444' },
+            ].filter(s => s.value > 0) : conformitySegments;
+            const centerLbl = (dataLoaded && totalInst > 0 && completionRate) ? `${completionRate}%` : '94.7%';
+            return (
+              <div className="flex items-center justify-center mb-4">
+                <DonutChart segments={liveConformitySegments} centerLabel={centerLbl} />
               </div>
-            ))}
-          </div>
+            );
+          })()}
+          {(() => {
+            const segs = (dataLoaded && totalInst > 0) ? [
+              { label: 'Conforme',     value: completedInst,                                         color: '#10b981' },
+              { label: 'En cours',     value: activeInst,                                            color: '#6366f1' },
+              { label: 'Non-conforme', value: Math.max(0, totalInst - completedInst - activeInst),   color: '#ef4444' },
+            ].filter(s => s.value > 0) : conformitySegments;
+            const total = segs.reduce((a, s) => a + s.value, 0);
+            return (
+              <div className="space-y-2.5">
+                {segs.map((seg) => (
+                  <div key={seg.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: seg.color }} />
+                      <span className="text-sm text-slate-600 dark:text-slate-300">{seg.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${(seg.value / total) * 100}%`, background: seg.color }} />
+                      </div>
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300 w-8 text-right">{seg.value}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -507,7 +679,7 @@ export function DashboardPage() {
             </button>
           </div>
           <div className="p-4 space-y-1">
-            {recentAlerts.map((alert, i) => (
+            {(liveAlerts.length > 0 ? liveAlerts : recentAlerts).map((alert, i) => (
               <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                 <div className={`w-8 h-8 ${alert.color} rounded-lg flex items-center justify-center shrink-0 mt-0.5`}>
                   <alert.icon className="w-4 h-4 text-white" />
@@ -537,7 +709,7 @@ export function DashboardPage() {
             </Link>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-            {bottleneckActivities.map((act) => (
+            {(liveBottlenecks.length > 0 ? liveBottlenecks : bottleneckActivities).map((act) => (
               <div key={act.name} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${act.overSla ? 'bg-red-500' : 'bg-emerald-500'}`} />

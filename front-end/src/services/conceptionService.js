@@ -34,13 +34,13 @@ const ConceptionService = {
     return data?.data ?? data;
   },
 
-  // Déploie un processus BPMN avec ses métadonnées
-  deployProcess: async ({ bpmnXml, processName, processDescription = '' }) => {
+  // Déploie un processus BPMN avec ses métadonnées et configurations de tâches
+  deployProcess: async ({ bpmnXml, processName, processDescription = '', configurations = [] }) => {
     const blob = new Blob([bpmnXml], { type: 'application/xml' });
     const fileName = (processName || 'process').replace(/\s+/g, '-').toLowerCase() + '.bpmn';
     const formData = new FormData();
     formData.append('file', blob, fileName);
-    formData.append('configurations', JSON.stringify([]));
+    formData.append('configurations', JSON.stringify(configurations));
     formData.append('metadata', JSON.stringify({ processName, processDescription }));
     formData.append('deployToEngine', 'true');
     formData.append('forceCreate', 'true');

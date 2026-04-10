@@ -9,6 +9,7 @@ import { Button } from '../components/ui/button';
 import { Tabs } from '../components/ui/tabs';
 import toast from 'react-hot-toast';
 import AnalyticsService from '../services/analyticsService';
+import { useSimulation } from '../context/simulation-context';
 
 // ─── Sub-tabs ────────────────────────────────────────────────────────────────
 
@@ -211,9 +212,25 @@ function MetricBadge({ label, value, color = 'blue' }) {
   );
 }
 
+// ─── Simulation log converter ─────────────────────────────────────────────────
+
+function convertSimLogs(logs) {
+  return logs.map((l, i) => ({
+    case_id: l.case_id ?? l.processInstanceId ?? `CASE-${i}`,
+    activity: l.activity ?? l.taskName ?? l.activityName ?? '—',
+    timestamp: l.timestamp ?? new Date().toISOString(),
+    resource: l.actor ?? l.assignee ?? 'Utilisateur',
+    duration: l.duration_min ?? 0,
+    status: l.status ?? 'completed',
+  }));
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function AdvancedAnalyticsPage() {
+  const { sharedLogs, sharedSource } = useSimulation();
+  // Active automatiquement les logs simulés à l'arrivée si disponibles
+  const [useSimLogs, setUseSimLogs] = useState(() => (sharedLogs?.length > 0));
   const [loading, setLoading] = useState(false);
   const [processDefinitions, setProcessDefinitions] = useState([]);
   const [selectedProcessKey, setSelectedProcessKey] = useState(null);
@@ -222,6 +239,11 @@ export function AdvancedAnalyticsPage() {
   const [activeTab, setActiveTab] = useState('process-discovery');
   const [analysisData, setAnalysisData] = useState({});
   const [error, setError] = useState(null);
+
+  // Si des logs arrivent après le montage (ex: navigation depuis simulation), les activer
+  useEffect(() => {
+    if (sharedLogs?.length > 0) setUseSimLogs(true);
+  }, [sharedLogs]);
 
   useEffect(() => {
     const load = async () => {
@@ -249,6 +271,9 @@ export function AdvancedAnalyticsPage() {
   }, []);
 
   const fetchLogs = async () => {
+    if (useSimLogs && sharedLogs?.length > 0) {
+      return convertSimLogs(sharedLogs);
+    }
     if (!selectedProcessKey) return [];
     try {
       const logs = await AnalyticsService.getProcessLogsForAnalytics(
@@ -268,7 +293,7 @@ export function AdvancedAnalyticsPage() {
     try {
       const logs = await fetchLogs();
       if (logs.length === 0) {
-        setError("Aucun log d'événement disponible pour l'analyse");
+        setError("Aucun log disponible. Utilisez le module de simulation pour générer des données, puis revenez ici.");
         return;
       }
 
@@ -315,7 +340,7 @@ export function AdvancedAnalyticsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
+      <div className="mx-auto w-full max-w-none space-y-4">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Link to="/" className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200">
@@ -381,6 +406,23 @@ export function AdvancedAnalyticsPage() {
           </CardContent>
         </Card>
 
+        {sharedLogs?.length > 0 && (
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm border ${useSimLogs ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400'}`}>
+            <Zap className="h-4 w-4 shrink-0" />
+            <span>
+              {useSimLogs
+                ? <><strong>{sharedLogs.length} logs simulés</strong> seront utilisés pour l'analyse.</>
+                : <><strong>{sharedLogs.length} logs simulés</strong> disponibles depuis le module de simulation.</>
+              }
+            </span>
+            <button
+              onClick={() => setUseSimLogs(v => !v)}
+              className={`ml-auto text-xs font-semibold px-3 py-1 rounded-lg border transition-colors ${useSimLogs ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700' : 'bg-white dark:bg-slate-800 border-amber-400 hover:bg-amber-50'}`}
+            >
+              {useSimLogs ? '✓ Logs simulés actifs' : 'Utiliser ces logs'}
+            </button>
+          </div>
+        )}
         {error && (
           <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {error}

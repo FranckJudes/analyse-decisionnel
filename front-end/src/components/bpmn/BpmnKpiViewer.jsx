@@ -4,10 +4,12 @@
  *  - couleur de fond selon la performance (vert / orange / rouge)
  *  - badge durée moyenne au-dessus du nœud
  *  - épaisseur des flèches selon le volume
+ *  - surlignage bleu pulsant des tâches actives en temps réel
  *
  * Props :
  *   xml          {string}   XML BPMN à afficher
  *   kpiData      {object}   { [elementId]: { avgDuration, count, errorRate, status } }
+ *   activeTasks  {string[]} IDs des éléments BPMN actuellement actifs (polling)
  *   onNodeClick  {function} callback(elementId, kpiData)
  */
 import React, { useEffect, useRef } from 'react';
@@ -26,7 +28,7 @@ function getColor(kpi) {
   return { fill: '#f0fdf4', stroke: '#22c55e' };
 }
 
-export default function BpmnKpiViewer({ xml, kpiData = {}, onNodeClick }) {
+export default function BpmnKpiViewer({ xml, kpiData = {}, activeTasks = [], onNodeClick }) {
   const containerRef = useRef(null);
   const viewerRef    = useRef(null);
   const overlayIdsRef = useRef([]);
@@ -51,11 +53,11 @@ export default function BpmnKpiViewer({ xml, kpiData = {}, onNodeClick }) {
 
     viewer.importXML(xml).then(() => {
       viewer.get('canvas').zoom('fit-viewport', 'auto');
-      applyOverlays(viewer, kpiData, onNodeClick);
+      applyOverlays(viewer, kpiData, activeTasks, onNodeClick);
     }).catch((err) => {
       console.error('BpmnKpiViewer: erreur import XML', err);
     });
-  }, [xml, kpiData]);
+  }, [xml, kpiData, activeTasks]);
 
   return (
     <div
@@ -67,20 +69,31 @@ export default function BpmnKpiViewer({ xml, kpiData = {}, onNodeClick }) {
 }
 
 // ── Applique couleurs + badges overlay ─────────────────────────────────────────
-function applyOverlays(viewer, kpiData, onNodeClick) {
-  const canvas         = viewer.get('canvas');
-  const overlays       = viewer.get('overlays');
+function applyOverlays(viewer, kpiData, activeTasks, onNodeClick) {
+  const canvas          = viewer.get('canvas');
+  const overlays        = viewer.get('overlays');
   const elementRegistry = viewer.get('elementRegistry');
-  const modeling       = null; // pas de modeling en NavigatedViewer
 
   // Supprimer les anciens overlays
   try { overlays.remove({ type: 'kpi-badge' }); } catch (_) {}
+  try { overlays.remove({ type: 'active-task' }); } catch (_) {}
+
+  // Construire un index name → kpi pour matcher les logs simulés (qui utilisent le nom, pas l'ID)
+  const kpiByName = {};
+  Object.entries(kpiData).forEach(([k, v]) => { kpiByName[k.toLowerCase().trim()] = v; });
+
+  const resolveKpi = (element) => {
+    // 1. Chercher par ID exact
+    if (kpiData[element.id]) return kpiData[element.id];
+    // 2. Chercher par nom de l'élément (cas logs simulés)
+    const name = (element.businessObject?.name || '').toLowerCase().trim();
+    if (name && kpiByName[name]) return kpiByName[name];
+    return null;
+  };
 
   // Colorer les éléments via CSS inline sur les shapes
-  const graphicsFactory = viewer.get('graphicsFactory');
-
   elementRegistry.forEach((element) => {
-    const kpi = kpiData[element.id];
+    const kpi = resolveKpi(element);
     if (!kpi) return;
 
     // ── Coloration du nœud ──────────────────────────────────────────────────
@@ -149,11 +162,75 @@ function applyOverlays(viewer, kpiData, onNodeClick) {
     } catch (_) {}
   });
 
+  // ── Surlignage des tâches actives en temps réel ────────────────────────────
+  const activeSet = new Set(activeTasks);
+  if (activeSet.size > 0) {
+    // Injecter les keyframes CSS si besoin
+    const styleId = 'bpmn-active-task-style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        @keyframes bpmn-stroke-pulse {
+          0%, 100% { stroke-width: 3px; stroke-opacity: 1; }
+          50%       { stroke-width: 5px; stroke-opacity: 0.65; }
+        }
+        @keyframes bpmn-dot-blink {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.3; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    elementRegistry.forEach((element) => {
+      if (!activeSet.has(element.id) || !element.width || element.type === 'label') return;
+
+      // Bordure bleue pulsante
+      try {
+        const gfx = canvas.getGraphics(element);
+        const shape = gfx.querySelector('rect, polygon, circle, path');
+        if (shape) {
+          shape.style.fill        = '#eff6ff';
+          shape.style.stroke      = '#3b82f6';
+          shape.style.strokeWidth = '3px';
+          shape.style.animation   = 'bpmn-stroke-pulse 1.5s ease-in-out infinite';
+        }
+      } catch (_) {}
+
+      // Badge "En cours" sous le nœud
+      overlays.add(element.id, 'active-task', {
+        position: { bottom: -22, left: 0 },
+        html: `<div style="
+          background:#3b82f6;
+          color:#fff;
+          font-size:10px;
+          font-weight:700;
+          padding:2px 8px;
+          border-radius:12px;
+          white-space:nowrap;
+          box-shadow:0 1px 6px rgba(59,130,246,.45);
+          pointer-events:none;
+          display:inline-flex;
+          align-items:center;
+          gap:5px;
+        ">
+          <span style="
+            width:6px;height:6px;border-radius:50%;
+            background:#fff;display:inline-block;
+            animation:bpmn-dot-blink 1.5s ease-in-out infinite;
+          "></span>
+          En cours
+        </div>`,
+      });
+    });
+  }
+
   // ── Clic sur un élément ─────────────────────────────────────────────────────
   if (onNodeClick) {
     viewer.get('eventBus').on('element.click', (event) => {
       const { element } = event;
-      const kpi = kpiData[element.id];
+      const kpi = resolveKpi(element);
       if (kpi) onNodeClick(element.id, kpi, element);
     });
   }

@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Analyse decisionel</title>
+    <script>
+      (function () {
+        try {
+          localStorage.setItem('theme', 'light');
+        } catch (error) {
+          // ignore storage errors
+        }
+        document.documentElement.classList.remove('dark');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

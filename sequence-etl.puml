@@ -1,105 +1,19 @@
 @startuml sequence-etl
-!pragma layout smetana
-title Séquence — Pipeline ETL & Construction du Modèle en Étoile
+title Pipeline ETL — Vue d'ensemble
 
-skinparam sequenceArrowThickness 2
-skinparam roundcorner 8
-skinparam sequenceParticipantBorderColor #6366f1
-skinparam sequenceParticipantBackgroundColor #f8fafc
-skinparam sequenceLifeLineBorderColor #cbd5e1
-skinparam sequenceGroupBorderColor #6366f1
-skinparam sequenceGroupBodyBackgroundColor #ede9fe22
-skinparam noteBorderColor #f59e0b
-skinparam noteBackgroundColor #fffbeb
+note as N1
+  Diagramme détaillé 1 :
+  [[sequence-etl-import.puml Import & préparation des événements]]
 
-actor       "Analyste BI"      as ANALYST
-participant "EventLogPage\n(UI)"         as UI
-participant "FileReader\n(Browser API)"  as FR
-participant "parseCSV()\n/ parseJSON()"  as PARSER
-participant "buildStarSchema()\n(ETL)"   as ETL
-participant "StarSchema\n(Mémoire)"      as SCHEMA
-
-== 1. Import du fichier ==
-
-ANALYST -> UI : Sélectionne fichier CSV/JSON\n(ou clique "Données d'exemple")
-activate UI
-
-alt Fichier uploadé
-  UI -> FR : readAsText(file)
-  activate FR
-  FR --> UI : contenu texte brut
-  deactivate FR
-else Données d'exemple
-  UI -> UI : charge SAMPLE_CSV intégré
-end
-
-UI -> PARSER : parseCSV(text) ou JSON.parse(text)
-activate PARSER
-PARSER -> PARSER : split lignes, extraire headers
-PARSER -> PARSER : mapper chaque ligne → objet {col: val}
-PARSER --> UI : rawLogs[] (n événements)
-deactivate PARSER
-
-UI -> UI : setRawLogs(data)\nsetHeaders(colonnes)
-UI -> UI : auto-détection mapping colonnes\n(case_id, activity, timestamp…)
-UI --> ANALYST : Aperçu données brutes + nb lignes
-deactivate UI
-
-== 2. Mapping & validation ==
-
-ANALYST -> UI : Ajuste mapping colonnes\n(select par colonne)
-activate UI
-UI -> UI : setColMap({ caseId, activity,\n timestamp, actor, status })
-UI --> ANALYST : Formulaire mis à jour
-deactivate UI
-
-== 3. Lancement ETL ==
-
-ANALYST -> UI : Clique "Lancer l'ETL"
-activate UI
-UI -> UI : setEtlStatus('running')
-UI --> ANALYST : Spinner "Transformation en cours…"
-
-UI -> ETL : buildStarSchema(rawLogs, colMap)
-activate ETL
-
-note over ETL
-  Itère chaque EventLog :
-  1. Parse timestamp → Date JS
-  2. Calcule durée vs événement précédent (même caseId)
-  3. Crée/réutilise entrée dans chaque dimension
-  4. Crée un fait avec FK vers chaque dimension
+  Diagramme détaillé 2 :
+  [[sequence-etl-transfo.puml Transformation ETL & export]]
 end note
 
-loop pour chaque eventLog
-  ETL -> ETL : dateKey = ts.toISOString().slice(0,10)
-  ETL -> ETL : dimTime[dateKey] = { year, quarter, month, week, dayOfWeek }
-  ETL -> ETL : dimActivity[activity] = { activityId, name, slaHours }
-  ETL -> ETL : dimActor[actor] = { actorId, name, role }
-  ETL -> ETL : dimStatus[status] = { statusId, isError }
-  ETL -> ETL : durationMin = (ts - prev.ts) / 60000
-  ETL -> ETL : facts.push({ factId, caseId, dateKey,\n activityId, actorId, statusId,\n durationMin, cost, isError })
-end
-
-ETL --> UI : { dimTime[], dimActivity[],\n dimActor[], dimStatus[], facts[] }
-deactivate ETL
-
-UI -> SCHEMA : stocker résultat en state
-activate SCHEMA
-SCHEMA --> UI : confirmé
-deactivate SCHEMA
-
-UI -> UI : setEtlStatus('done')\nbasculer onglet "Modèle en étoile"
-UI --> ANALYST : Schéma en étoile visualisé\n+ stats (N faits, M dimensions)
-deactivate UI
-
-== 4. Export ==
-
-ANALYST -> UI : Clique "Exporter faits CSV"
-activate UI
-UI -> UI : toCSV(schema.facts)
-UI -> UI : Blob → URL.createObjectURL\n→ déclenche téléchargement
-UI --> ANALYST : Fichier fait_execution.csv téléchargé
-deactivate UI
+rectangle "Vue d'ensemble" {
+  ANALYST -- UI : Interaction import + mapping
+  UI -- ETL : buildStarSchema(...)
+  ETL -- SCHEMA : Stockage en mémoire
+  UI -- ANALYST : Visualisation et export CSV
+}
 
 @enduml

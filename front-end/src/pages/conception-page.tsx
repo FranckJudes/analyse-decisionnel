@@ -151,8 +151,19 @@ export function ConceptionPage() {
       };
       setInstances(prev => [newInst, ...prev]);
       toast.success(`Instance lancée pour "${proc.name}"`);
-    } catch {
-      toast.error(`Erreur au démarrage de "${proc.name}"`);
+    } catch (err: any) {
+      const raw: string = err?.message ?? String(err);
+      const lower = raw.toLowerCase();
+      if (lower.includes('does not exist') || lower.includes('not found') || lower.includes('introuvable') || raw.includes('404')) {
+        toast.error(`Processus "${proc.key}" introuvable dans Camunda. Veuillez le redéployer.`, { duration: 5000 });
+      } else if (raw.includes('401') || raw.includes('403')) {
+        toast.error('Non autorisé à démarrer ce processus.');
+      } else {
+        // Extrait le message depuis le JSON si possible
+        let display = raw;
+        try { display = JSON.parse(raw).message ?? raw; } catch { /* raw is fine */ }
+        toast.error(`Erreur au démarrage de "${proc.name}" : ${display}`);
+      }
     } finally {
       setLaunching(null);
     }

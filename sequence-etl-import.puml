@@ -1,0 +1,53 @@
+@startuml sequence-etl-import
+!pragma layout smetana
+title Séquence — Import & Préparation des journaux d'événements
+
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+skinparam sequenceParticipantBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f8fafc
+skinparam sequenceLifeLineBorderColor #cbd5e1
+skinparam sequenceGroupBorderColor #6366f1
+skinparam sequenceGroupBodyBackgroundColor #ede9fe22
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+actor       "Analyste BI"      as ANALYST
+participant "EventLogPage\\n(UI)"         as UI
+participant "FileReader\\n(Browser API)"  as FR
+participant "parseCSV()\\n/ parseJSON()"  as PARSER
+
+== 1. Import du fichier ==
+
+ANALYST -> UI : Sélectionne fichier CSV/JSON\\n(ou clique "Données d'exemple")
+activate UI
+
+alt Fichier uploadé
+  UI -> FR : readAsText(file)
+  activate FR
+  FR --> UI : contenu texte brut
+  deactivate FR
+else Données d'exemple
+  UI -> UI : charge SAMPLE_CSV intégré
+end
+
+UI -> PARSER : parseCSV(text) ou JSON.parse(text)
+activate PARSER
+PARSER -> PARSER : split lignes, extraire headers
+PARSER -> PARSER : mapper chaque ligne → objet {col: val}
+PARSER --> UI : rawLogs[] (n événements)
+deactivate PARSER
+
+UI -> UI : setRawLogs(data)\\nsetHeaders(colonnes)
+UI -> UI : auto-détection mapping colonnes\\n(case_id, activity, timestamp…)
+UI --> ANALYST : Aperçu données brutes + nb lignes
+
+== 2. Mapping & validation ==
+
+ANALYST -> UI : Ajuste mapping colonnes\\n(select par colonne)
+UI -> UI : setColMap({ caseId, activity,\\n timestamp, actor, status })
+UI --> ANALYST : Formulaire mis à jour
+
+deactivate UI
+
+@enduml

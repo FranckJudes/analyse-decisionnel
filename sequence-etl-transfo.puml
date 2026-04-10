@@ -1,0 +1,69 @@
+@startuml sequence-etl-transformation
+!pragma layout smetana
+title Séquence — Lancement ETL, Modèle en étoile & Export
+
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+skinparam sequenceParticipantBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f8fafc
+skinparam sequenceLifeLineBorderColor #cbd5e1
+skinparam sequenceGroupBorderColor #6366f1
+skinparam sequenceGroupBodyBackgroundColor #ede9fe22
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+actor       "Analyste BI"      as ANALYST
+participant "EventLogPage\n(UI)"         as UI
+participant "buildStarSchema()\n(ETL)"   as ETL
+participant "StarSchema\n(Mémoire)"      as SCHEMA
+
+== 3. Lancement ETL ==
+
+ANALYST -> UI : Clique "Lancer l'ETL"
+activate UI
+UI -> UI : setEtlStatus('running')
+UI --> ANALYST : Spinner "Transformation en cours…"
+
+UI -> ETL : buildStarSchema(rawLogs, colMap)
+activate ETL
+
+note over ETL
+  Itère chaque EventLog :
+  1. Parse timestamp → Date JS
+  2. Calcule durée vs événement précédent (même caseId)
+  3. Crée/réutilise entrée dans chaque dimension
+  4. Crée un fait avec FK vers chaque dimension
+end note
+
+loop pour chaque eventLog
+  ETL -> ETL : dateKey = ts.toISOString().slice(0,10)
+  ETL -> ETL : dimTime[dateKey] = { year, quarter, month, week, dayOfWeek }
+  ETL -> ETL : dimActivity[activity] = { activityId, name, slaHours }
+  ETL -> ETL : dimActor[actor] = { actorId, name, role }
+  ETL -> ETL : dimStatus[status] = { statusId, isError }
+  ETL -> ETL : durationMin = (ts - prev.ts) / 60000
+  ETL -> ETL : facts.push({ factId, caseId, dateKey,\n activityId, actorId, statusId,\n durationMin, cost, isError })
+end
+
+ETL --> UI : { dimTime[], dimActivity[], dimActor[], dimStatus[], facts[] }
+deactivate ETL
+
+UI -> SCHEMA : stocker résultat en state
+activate SCHEMA
+SCHEMA --> UI : confirmé
+deactivate SCHEMA
+
+UI -> UI : setEtlStatus('done')\nbasculer onglet "Modèle en étoile"
+UI --> ANALYST : Schéma en étoile visualisé\n+ stats (N faits, M dimensions)
+deactivate UI
+
+== 4. Export ==
+
+ANALYST -> UI : Clique "Exporter faits CSV"
+activate UI
+UI -> UI : toCSV(schema.facts)
+UI -> UI : Blob → URL.createObjectURL\n→ déclenche téléchargement
+UI --> ANALYST : Fichier fait_execution.csv téléchargé
+deactivate UI
+
+@enduml

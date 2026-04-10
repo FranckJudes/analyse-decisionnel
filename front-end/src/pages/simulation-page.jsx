@@ -25,6 +25,8 @@ import {
   Info,
 } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_BASE_SERVICE_HARMONI;
+
 // ─── Process templates ────────────────────────────────────────────────────────
 
 const PROCESS_TEMPLATES = {
@@ -91,8 +93,7 @@ function jitter(base, factor) {
   return base * (1 + (Math.random() * 2 - 1) * factor);
 }
 
-function generateLogs({ processKey, numCases, scenario, startDate, errorRate }) {
-  const template = PROCESS_TEMPLATES[processKey];
+function generateLogs({ template, numCases, scenario, startDate, errorRate }) {
   if (!template) return [];
 
   const actMap = Object.fromEntries(template.activities.map(a => [a.id, a]));
@@ -206,6 +207,119 @@ export function SimulationPage() {
   const { publishLogs } = useSimulation();
   const navigate = useNavigate();
   const [processKey, setProcessKey] = useState('onboarding');
+  const [deployedProcesses, setDeployedProcesses] = useState([]);
+  const [customTemplates, setCustomTemplates] = useState({});
+  const [loadingBpmn, setLoadingBpmn] = useState(false);
+  const allTemplates = { ...PROCESS_TEMPLATES, ...customTemplates };
+
+  // Fetch deployed processes from backend
+  React.useEffect(() => {
+    fetch(`${API_URL}/api/process-engine/my-deployed-processes`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+        setDeployedProcesses(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  // When a deployed process is selected (not a static template), fetch BPMN and parse tasks
+  React.useEffect(() => {
+    if (!processKey || PROCESS_TEMPLATES[processKey]) return;
+    const proc = deployedProcesses.find(p => (p.processDefinitionKey ?? p.key) === processKey);
+    if (!proc || customTemplates[processKey]) return;
+
+    const procLabel = proc.processName ?? proc.name ?? proc.processDefinitionKey ?? processKey;
+
+    // Construit un template à partir du XML BPMN (parser robuste via localName)
+    const parseBpmnTasks = (xml) => {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        const taskLocalNames = new Set([
+          'task', 'usertask', 'servicetask', 'scripttask',
+          'manualtask', 'businessruletask', 'receivetask', 'sendtask',
+        ]);
+        const tasks = [];
+        const seen = new Set();
+        const allEls = doc.getElementsByTagName('*');
+        for (let i = 0; i < allEls.length; i++) {
+          const el = allEls[i];
+          const localName = (el.localName || el.tagName || '').toLowerCase();
+          if (!taskLocalNames.has(localName)) continue;
+          const name = el.getAttribute('name');
+          const id = el.getAttribute('id');
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            tasks.push({ id, name: name || id, baseDuration: 1, actors: ['Utilisateur'] });
+          }
+        }
+        return tasks;
+      } catch (e) {
+        console.error('[Simulation] parseBpmnTasks error:', e);
+        return [];
+      }
+    };
+
+    // Génère un fallback template avec une activité générique si BPMN non parseable
+    const fallbackTemplate = () => ({
+      label: procLabel,
+      activities: [
+        { id: 'step1', name: 'Exécution du processus', baseDuration: 2, actors: ['Utilisateur'] },
+      ],
+      variants: [
+        { name: 'Nominal', path: ['step1'], weight: 80 },
+        { name: 'Rapide',  path: ['step1'], weight: 20 },
+      ],
+    });
+
+    const buildTemplate = (xml) => {
+      const tasks = parseBpmnTasks(xml);
+      if (tasks.length === 0) {
+        console.warn('[Simulation] Aucune tâche trouvée dans le BPMN, utilisation du fallback');
+        return fallbackTemplate();
+      }
+      const path = tasks.map(t => t.id);
+      return {
+        label: procLabel,
+        activities: tasks,
+        variants: [
+          { name: 'Nominal', path, weight: 70 },
+          { name: 'Partiel', path: path.slice(0, Math.max(1, Math.ceil(path.length * 0.6))), weight: 20 },
+          { name: 'Court',   path: path.slice(0, Math.max(1, Math.ceil(path.length * 0.3))), weight: 10 },
+        ],
+      };
+    };
+
+    // Si le BPMN est déjà dans l'objet proc (champ bpmnXml)
+    if (proc.bpmnXml) {
+      setCustomTemplates(prev => ({ ...prev, [processKey]: buildTemplate(proc.bpmnXml) }));
+      return;
+    }
+
+    setLoadingBpmn(true);
+
+    // Fetch BPMN XML via le nouvel endpoint backend
+    fetch(`${API_URL}/api/process-engine/bpmn/${encodeURIComponent(processKey)}`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(data => {
+        const wrapped = data?.data ?? data;
+        const xml = wrapped?.bpmnXml ?? wrapped?.xml ?? (typeof wrapped === 'string' ? wrapped : null);
+        if (xml) {
+          setCustomTemplates(prev => ({ ...prev, [processKey]: buildTemplate(xml) }));
+        } else {
+          // Réponse OK mais pas de XML → fallback
+          setCustomTemplates(prev => ({ ...prev, [processKey]: fallbackTemplate() }));
+        }
+      })
+      .catch(err => {
+        console.warn('[Simulation] BPMN fetch failed, using fallback:', err.message);
+        // Fallback : template générique basé sur le nom du processus
+        setCustomTemplates(prev => ({ ...prev, [processKey]: fallbackTemplate() }));
+      })
+      .finally(() => setLoadingBpmn(false));
+  }, [processKey, deployedProcesses]);
+
   const [numCases, setNumCases] = useState(50);
   const [scenario, setScenario] = useState('nominal');
   const [startDate, setStartDate] = useState('2025-01-01');
@@ -220,12 +334,15 @@ export function SimulationPage() {
     const converted = logs.map((l, i) => ({
       id: `sim-${i}`,
       taskName: l.activity,
+      activity: l.activity,
       durationMs: (l.duration_min || 0) * 60000,
       eventType: l.status === 'error' ? 'ERROR' : 'COMPLETE',
       status: l.status,
       processInstanceId: l.case_id,
     }));
-    publishLogs(converted, 'simulation');
+    // Passer aussi la clé du processus pour charger le bon BPMN dans ProcessMonitor
+    const key = PROCESS_TEMPLATES[processKey] ? null : processKey;
+    publishLogs(converted, 'simulation', key);
     navigate({ to: '/process-monitor' });
   }
   const [showConfig, setShowConfig] = useState(true);
@@ -233,7 +350,7 @@ export function SimulationPage() {
   const run = useCallback(() => {
     setRunning(true);
     setTimeout(() => {
-      const result = generateLogs({ processKey, numCases, scenario, startDate, errorRate });
+      const result = generateLogs({ template: allTemplates[processKey], numCases, scenario, startDate, errorRate });
       setLogs(result);
       setStats(computeStats(result));
       setRunning(false);
@@ -252,7 +369,7 @@ export function SimulationPage() {
     URL.revokeObjectURL(url);
   }
 
-  const template = PROCESS_TEMPLATES[processKey];
+  const template = allTemplates[processKey];
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6 space-y-6">
@@ -266,13 +383,23 @@ export function SimulationPage() {
           </p>
         </div>
         {logs.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => {
+                publishLogs(logs, 'simulation', PROCESS_TEMPLATES[processKey] ? null : processKey);
+                navigate({ to: '/advanced-analytics' });
+              }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 transition-colors shadow-sm"
+            >
+              <Zap className="w-4 h-4" />
+              Analyser les logs
+            </button>
             <button
               onClick={sendToMonitor}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
             >
               <Activity className="w-4 h-4" />
-              Visualiser dans Process Monitor
+              Process Monitor
             </button>
             <button
               onClick={handleDownload}
@@ -315,10 +442,36 @@ export function SimulationPage() {
                     onChange={e => setProcessKey(e.target.value)}
                     className="w-full text-sm border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
-                    {Object.entries(PROCESS_TEMPLATES).map(([key, t]) => (
-                      <option key={key} value={key}>{t.label}</option>
-                    ))}
+                    <optgroup label="Modèles prédéfinis">
+                      {Object.entries(PROCESS_TEMPLATES).map(([key, t]) => (
+                        <option key={key} value={key}>{t.label}</option>
+                      ))}
+                    </optgroup>
+                    {deployedProcesses.length > 0 && (
+                      <optgroup label="Processus déployés (application)">
+                        {deployedProcesses.map(p => {
+                          const key = p.processDefinitionKey ?? p.key ?? String(p.id);
+                          const name = p.processName ?? p.name ?? key;
+                          return <option key={key} value={key}>{name}</option>;
+                        })}
+                      </optgroup>
+                    )}
                   </select>
+                  {loadingBpmn && (
+                    <p className="text-xs text-indigo-500 mt-1 flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" /> Chargement du modèle BPMN…
+                    </p>
+                  )}
+                  {!PROCESS_TEMPLATES[processKey] && customTemplates[processKey] && (
+                    <p className="text-xs text-emerald-600 mt-1">
+                      ✓ {customTemplates[processKey].activities.length} activités détectées depuis le BPMN
+                    </p>
+                  )}
+                  {!PROCESS_TEMPLATES[processKey] && customTemplates[processKey] && !loadingBpmn && (
+                    <p className="text-xs text-emerald-600 mt-1">
+                      ✓ {customTemplates[processKey].activities.length} activité{customTemplates[processKey].activities.length > 1 ? 's' : ''} — prêt à simuler
+                    </p>
+                  )}
                 </div>
 
                 {/* Num cases */}
@@ -409,7 +562,7 @@ export function SimulationPage() {
           {/* Run button */}
           <button
             onClick={run}
-            disabled={running}
+            disabled={running || !template}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-md"
           >
             {running
@@ -426,54 +579,73 @@ export function SimulationPage() {
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
               <BarChart2 className="w-4 h-4 text-slate-400" />
-              Modèle de processus — <span className="text-indigo-600 dark:text-indigo-400">{template.label}</span>
+              Modèle de processus — <span className="text-indigo-600 dark:text-indigo-400">{template?.label ?? processKey}</span>
             </h2>
 
-            {/* Activities flow */}
-            <div className="flex items-center flex-wrap gap-2 mb-4">
-              {template.activities.map((act, i) => (
-                <React.Fragment key={act.id}>
-                  <div className="flex flex-col items-center">
-                    <div className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 text-xs font-medium text-slate-700 dark:text-slate-300 text-center max-w-[120px]">
-                      {act.name}
-                    </div>
-                    <span className="text-[10px] text-slate-400 mt-1">{act.baseDuration}h base</span>
-                  </div>
-                  {i < template.activities.length - 1 && (
-                    <div className="text-slate-300 dark:text-slate-600 text-lg shrink-0">→</div>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-
-            {/* Variants */}
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Variants du processus</p>
-              {template.variants.map(v => (
-                <div key={v.name} className="flex items-center gap-3">
-                  <div className="w-20 text-right">
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{v.name}</span>
-                  </div>
-                  <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${v.weight}%` }} />
-                  </div>
-                  <span className="text-xs text-slate-400 w-8 text-right">{v.weight}%</span>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {v.path.map((actId, pi) => {
-                      const act = template.activities.find(a => a.id === actId);
-                      return (
-                        <React.Fragment key={actId}>
-                          <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                            {act?.name ?? actId}
-                          </span>
-                          {pi < v.path.length - 1 && <span className="text-slate-300 text-xs">›</span>}
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
+            {!template ? (
+              <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-3">
+                {loadingBpmn ? (
+                  <>
+                    <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
+                    <p className="text-sm">Chargement du modèle BPMN en cours…</p>
+                  </>
+                ) : (
+                  <>
+                    <Info className="w-6 h-6 opacity-40" />
+                    <p className="text-sm">Modèle BPMN non disponible pour ce processus.</p>
+                    <p className="text-xs text-slate-400">Le BPMN XML n'a pas pu être récupéré depuis Camunda.<br/>Sélectionnez un modèle prédéfini ou redéployez le processus.</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Activities flow */}
+                <div className="flex items-center flex-wrap gap-2 mb-4">
+                  {template.activities.map((act, i) => (
+                    <React.Fragment key={act.id}>
+                      <div className="flex flex-col items-center">
+                        <div className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 text-xs font-medium text-slate-700 dark:text-slate-300 text-center max-w-[120px]">
+                          {act.name}
+                        </div>
+                        <span className="text-[10px] text-slate-400 mt-1">{act.baseDuration}h base</span>
+                      </div>
+                      {i < template.activities.length - 1 && (
+                        <div className="text-slate-300 dark:text-slate-600 text-lg shrink-0">→</div>
+                      )}
+                    </React.Fragment>
+                  ))}
                 </div>
-              ))}
-            </div>
+
+                {/* Variants */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Variants du processus</p>
+                  {template.variants.map(v => (
+                    <div key={v.name} className="flex items-center gap-3">
+                      <div className="w-20 text-right">
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{v.name}</span>
+                      </div>
+                      <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${v.weight}%` }} />
+                      </div>
+                      <span className="text-xs text-slate-400 w-8 text-right">{v.weight}%</span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {v.path.map((actId, pi) => {
+                          const act = template.activities.find(a => a.id === actId);
+                          return (
+                            <React.Fragment key={actId}>
+                              <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {act?.name ?? actId}
+                              </span>
+                              {pi < v.path.length - 1 && <span className="text-slate-300 text-xs">›</span>}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Stats */}

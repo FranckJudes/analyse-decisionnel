@@ -7,6 +7,7 @@
  *   3. Logs transformés — Table des événements après ETL
  */
 import React, { useState, useRef } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import {
   Upload,
   Database,
@@ -27,9 +28,12 @@ import {
   Play,
   X,
   FileSpreadsheet,
+  TrendingUp,
+  Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AnalyticsService from '../services/analyticsService';
+import { useSimulation } from '../context/simulation-context';
 
 // ─── ETL helpers ──────────────────────────────────────────────────────────────
 
@@ -307,6 +311,8 @@ CASE-003,Clôture,2025-01-12 16:00,System,completed`;
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function EventLogPage() {
+  const navigate = useNavigate();
+  const { publishLogs } = useSimulation();
   const [tab, setTab] = useState('import');
   const [rawLogs, setRawLogs] = useState([]);
   const [headers, setHeaders] = useState([]);
@@ -315,6 +321,23 @@ export function EventLogPage() {
   const [etlStatus, setEtlStatus] = useState(null); // null | 'running' | 'done' | 'error'
   const [fileName, setFileName] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Convertit les rawLogs vers le format attendu par SimulationContext
+  function buildContextLogs() {
+    return rawLogs.map((r, i) => ({
+      id: `etl-${i}`,
+      case_id: r[colMap.caseId] ?? `CASE-${i}`,
+      activity: r[colMap.activity] ?? '—',
+      timestamp: r[colMap.timestamp] ?? new Date().toISOString(),
+      actor: r[colMap.actor] ?? 'Utilisateur',
+      status: r[colMap.status] ?? 'completed',
+      duration_min: 0,
+      // champs compatibles ProcessMonitor
+      taskName: r[colMap.activity] ?? '—',
+      durationMs: 0,
+      eventType: (r[colMap.status] ?? '').toLowerCase() === 'error' ? 'ERROR' : 'COMPLETE',
+    }));
+  }
 
   function handleFileUpload(e) {
     const file = e.target.files[0];
@@ -408,7 +431,31 @@ export function EventLogPage() {
             Importez vos logs de processus, transformez-les et visualisez le modèle en étoile
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {rawLogs.length > 0 && (
+            <>
+              <button
+                onClick={() => {
+                  publishLogs(buildContextLogs(), 'etl');
+                  navigate({ to: '/advanced-analytics' });
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors shadow-sm"
+              >
+                <TrendingUp className="w-4 h-4" />
+                Analyser
+              </button>
+              <button
+                onClick={() => {
+                  publishLogs(buildContextLogs(), 'etl');
+                  navigate({ to: '/process-monitor' });
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
+              >
+                <Activity className="w-4 h-4" />
+                Process Monitor
+              </button>
+            </>
+          )}
           {schema && (
             <button
               onClick={exportFacts}
@@ -761,6 +808,33 @@ export function EventLogPage() {
                     … {schema.facts.length - 50} lignes non affichées
                   </p>
                 )}
+              </div>
+
+              {/* Bandeau d'actions post-ETL */}
+              <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 rounded-b-xl">
+                <span className="text-xs text-slate-500 dark:text-slate-400 mr-auto">
+                  {schema.facts.length} événements prêts — choisissez votre destination :
+                </span>
+                <button
+                  onClick={() => {
+                    publishLogs(buildContextLogs(), 'etl');
+                    navigate({ to: '/advanced-analytics' });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors shadow-sm"
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  Analyser les logs
+                </button>
+                <button
+                  onClick={() => {
+                    publishLogs(buildContextLogs(), 'etl');
+                    navigate({ to: '/process-monitor' });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
+                >
+                  <Activity className="w-4 h-4" />
+                  Process Monitor
+                </button>
               </div>
             </>
           )}

@@ -15,6 +15,7 @@ interface InfoData {
   board: string;
   instructions: string;
   deliverable: string;
+  assigneeUserId?: string | null;
 }
 
 interface HabilitationFormState {
@@ -593,6 +594,7 @@ export function NewProcessPage() {
             board: 'Comité de supervision',
             instructions: `Configurer la tâche: ${node.data?.label || node.id}`,
             deliverable: 'Livrable attendu',
+            assigneeUserId: null,
           }
         }));
       }
@@ -1071,6 +1073,23 @@ export function NewProcessPage() {
                   </p>
                 )}
               </div>
+              {selectedNode && (
+                <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 dark:border-indigo-700 dark:bg-indigo-900/20 px-4 py-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-2">
+                    Assigné à cette tâche
+                  </label>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    value={currentNodeConfig.assigneeUserId ?? ''}
+                    onChange={e => setCurrentNodeConfig(prev => ({ ...prev, assigneeUserId: e.target.value || null }))}
+                  >
+                    <option value="">— Non assigné —</option>
+                    {(backendUsers.length > 0 ? backendUsers : fakeUsers).map(u => (
+                      <option key={u.id} value={u.id}>{u.name} · {u.role}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="space-y-3">
                 {configSections.map((section) => {
                   const isOpen = openSections[section.id];
@@ -1125,12 +1144,98 @@ export function NewProcessPage() {
             toast.error('Aucun diagramme BPMN. Revenez à l\'étape 2 pour modéliser le processus.');
             return;
           }
+
+          // ── Construire les configurations de tâches depuis les formStates ──
+          const tasks = bpmnData?.tasks ?? [];
+          const durationMinutes =
+            planificationForm.durationUnit === 'Heures'
+              ? parseInt(planificationForm.durationValue || '0') * 60
+              : parseInt(planificationForm.durationValue || '0');
+
+          const configurations = tasks.map((task: any) => {
+            const nodeInfo = nodeConfigs[task.id] ?? infoData;
+            return {
+              taskId:   task.id,
+              taskName: task.name ?? task.id,
+              taskType: task.type ?? 'userTask',
+
+              // Habilitation
+              assigneeUser:   nodeInfo.assigneeUserId ?? (habilitationForm.assignOwner ? (habilitationForm.owner ?? null) : null),
+              interestedUser: habilitationForm.interestedEnabled ? (habilitationForm.interestedUser ?? null) : null,
+              assigneeGroup:  habilitationForm.groupEnabled ? (habilitationForm.group ?? null) : null,
+              assigneeEntity: habilitationForm.entityEnabled ? (habilitationForm.entity ?? null) : null,
+              returnAllowed:  habilitationForm.allowReturn,
+
+              // Info
+              category:           nodeInfo.category,
+              board:              nodeInfo.board,
+              workInstructions:   nodeInfo.instructions,
+              expectedDeliverable: nodeInfo.deliverable,
+
+              // Planification
+              maxDurationInMinutes: durationMinutes || null,
+              priority:             planificationForm.priority,
+              viewHistoryEnabled:   planificationForm.historyEnabled,
+              kpiTasksProcessed:    planificationForm.kpis.tasksProcessed,
+              kpiReturnRate:        planificationForm.kpis.returnRate,
+              kpiAvgInteractions:   planificationForm.kpis.avgInteractions,
+              kpiDeadlineCompliance: planificationForm.kpis.deadlineCompliance,
+              kpiValidationWaitTime: planificationForm.kpis.waitingTime,
+              kpiPriorityCompliance: planificationForm.kpis.priorityCompliance,
+              kpiEmergencyManagement: planificationForm.kpis.emergencyHandling,
+              notifierSuperviseur:    planificationForm.actions.notifySupervisor,
+              reassignerTache:        planificationForm.actions.reassign,
+              envoyerRappel:          planificationForm.actions.sendReminder,
+              escaladeHierarchique:   planificationForm.actions.escalate,
+              changementPriorite:     planificationForm.actions.changePriority,
+              bloquerWorkflow:        planificationForm.actions.blockWorkflow,
+              genererAlerteEquipe:    planificationForm.actions.generateAlert,
+              demanderJustification:  planificationForm.actions.requestJustification,
+              activerActionCorrective: planificationForm.actions.correctiveAction,
+              escaladeExterne:        planificationForm.actions.externalEscalation,
+              cloturerDefaut:         planificationForm.actions.closeDefect,
+              suiviParKpi:            planificationForm.actions.followByKpi,
+              planBOuTacheAlternative: planificationForm.actions.planB,
+
+              // Notifications
+              notifyOnCreation:       notificationsForm.notifyOnCreation,
+              notificationSensitivity: notificationsForm.sensitivity,
+              selectedReminders:      notificationsForm.reminders.join(','),
+              sendNotificationOnDelay: notificationsForm.alertEscalade,
+
+              // Ressources
+              attachmentsEnabled:    resourceForm.attachmentsEnabled,
+              securityLevel:         resourceForm.securityLevel,
+              externalTools:         resourceForm.externalTools,
+              linkToOtherTask:       resourceForm.linkToTask,
+              scriptBusinessRule:    resourceForm.businessRule,
+              addFormResource:       resourceForm.formResource,
+              archiveAttachment:     resourceForm.commonActions.archive,
+              shareArchivePdf:       resourceForm.commonActions.sharePdf,
+              describeFolderDoc:     resourceForm.commonActions.describe,
+              deleteAttachmentDoc:   resourceForm.commonActions.delete,
+              consultAttachmentDoc:  resourceForm.commonActions.consult,
+              downloadZip:           resourceForm.commonActions.downloadZip,
+              importAttachment:      resourceForm.documentActions.import,
+              editAttachment:        resourceForm.documentActions.edit,
+              annotateDocument:      resourceForm.documentActions.annotate,
+              verifyAttachmentDoc:   resourceForm.documentActions.verify,
+              searchInDocument:      resourceForm.documentActions.search,
+              removeDocument:        resourceForm.documentActions.remove,
+              addNewAttachment:      resourceForm.documentActions.addNew,
+              convertAttachmentPdf:  resourceForm.documentActions.convertPdf,
+              downloadAttachmentPdf: resourceForm.documentActions.downloadPdf,
+              downloadOriginalFormat: resourceForm.documentActions.downloadOriginal,
+            };
+          });
+
           const loadingToast = toast.loading('Déploiement en cours…');
           try {
             await ConceptionService.deployProcess({
               bpmnXml,
               processName: name,
               processDescription,
+              configurations,
             });
             toast.dismiss(loadingToast);
             toast.success(`Processus "${name}" déployé avec succès !`);
