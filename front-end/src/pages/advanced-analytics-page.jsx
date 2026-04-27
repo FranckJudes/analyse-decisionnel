@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
-  Network, BarChart2, Clock, Zap, Users, RefreshCw,
+  Network, BarChart2, Zap, Users, RefreshCw,
   Home, ChevronRight, TrendingUp, AlertTriangle, Play, FileSpreadsheet
 } from 'lucide-react';
-import { Card, CardHeader, CardContent } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Tabs } from '../components/ui/tabs';
 import toast from 'react-hot-toast';
@@ -228,9 +228,7 @@ function convertSimLogs(logs) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function AdvancedAnalyticsPage() {
-  const { sharedLogs, sharedSource } = useSimulation();
-  // Active automatiquement les logs simulés à l'arrivée si disponibles
-  const [useSimLogs, setUseSimLogs] = useState(() => (sharedLogs?.length > 0));
+  const { sharedLogs } = useSimulation();
   const [loading, setLoading] = useState(false);
   const [processDefinitions, setProcessDefinitions] = useState([]);
   const [selectedProcessKey, setSelectedProcessKey] = useState(null);
@@ -240,12 +238,15 @@ export function AdvancedAnalyticsPage() {
   const [analysisData, setAnalysisData] = useState({});
   const [error, setError] = useState(null);
 
-  // Si des logs arrivent après le montage (ex: navigation depuis simulation), les activer
-  useEffect(() => {
-    if (sharedLogs?.length > 0) setUseSimLogs(true);
-  }, [sharedLogs]);
+  // Ref pour éviter le double auto-run
+  const autoRanRef = useRef(false);
 
+  // Source de logs : simulation/ETL si disponible, sinon Camunda
+  const hasSimLogs = sharedLogs?.length > 0;
+
+  // Charge les process definitions en arrière-plan (uniquement pour le sélecteur)
   useEffect(() => {
+    if (hasSimLogs) return; // pas besoin si on a déjà des logs
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -268,61 +269,99 @@ export function AdvancedAnalyticsPage() {
       }
     };
     load();
-  }, []);
+  }, [hasSimLogs]);
 
-  const fetchLogs = async () => {
-    if (useSimLogs && sharedLogs?.length > 0) {
-      return convertSimLogs(sharedLogs);
+  // Résout les logs à utiliser selon la source active
+  const resolveLogs = useCallback(async (forceSimLogs = false) => {
+    if (forceSimLogs || hasSimLogs) {
+      return convertSimLogs(sharedLogs || []);
     }
     if (!selectedProcessKey) return [];
     try {
       const logs = await AnalyticsService.getProcessLogsForAnalytics(
-        selectedProcessKey,
-        startDate || null,
-        endDate || null
+        selectedProcessKey, startDate || null, endDate || null
       );
       return Array.isArray(logs) ? logs : [];
     } catch {
       return [];
     }
-  };
+  }, [hasSimLogs, sharedLogs, selectedProcessKey, startDate, endDate]);
+
+  const runAnalysisWithLogs = useCallback(async (tab, logs) => {
+    if (!logs.length) {
+      setError("Aucun log disponible. Importez un fichier ou lancez une simulation d'abord.");
+      return;
+    }
+    setError(null);
+    let result;
+    switch (tab) {
+      case 'process-discovery':
+        result = await AnalyticsService.processDiscovery(logs, 'inductive');
+        break;
+      case 'process-variants':
+        result = await AnalyticsService.processVariants(logs, 10);
+        break;
+      case 'bottleneck-analysis':
+        result = await AnalyticsService.bottleneckAnalysis(logs, 'waiting_time');
+        break;
+      case 'performance-prediction': {
+        const first = logs[0] || {};
+        const caseId = first.case_id || first.process_instance_id || first.processInstanceId || first.caseId || null;
+        if (!caseId) { setError('Aucun cas disponible pour la prédiction'); return; }
+        result = await AnalyticsService.performancePrediction(logs, 'completion_time', { case_id: caseId });
+        break;
+      }
+      case 'social-network-analysis':
+        result = await AnalyticsService.socialNetworkAnalysis(logs, 'handover_of_work');
+        break;
+      default:
+        setError("Type d'analyse non reconnu");
+        return;
+    }
+    setAnalysisData((prev) => ({ ...prev, [tab]: result }));
+  }, []);
+
+  // Auto-run : dès que des logs partagés sont disponibles, lancer toutes les analyses
+  useEffect(() => {
+    if (!hasSimLogs || autoRanRef.current) return;
+    autoRanRef.current = true;
+
+    const runAll = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const logs = convertSimLogs(sharedLogs);
+        const tabs = ['process-discovery', 'process-variants', 'bottleneck-analysis', 'social-network-analysis'];
+        const results = await Promise.allSettled(tabs.map(async (tab) => {
+          try {
+            let result;
+            switch (tab) {
+              case 'process-discovery':  result = await AnalyticsService.processDiscovery(logs, 'inductive'); break;
+              case 'process-variants':   result = await AnalyticsService.processVariants(logs, 10); break;
+              case 'bottleneck-analysis': result = await AnalyticsService.bottleneckAnalysis(logs, 'waiting_time'); break;
+              case 'social-network-analysis': result = await AnalyticsService.socialNetworkAnalysis(logs, 'handover_of_work'); break;
+            }
+            return { tab, result };
+          } catch { return null; }
+        }));
+        const merged = {};
+        results.forEach(r => { if (r.status === 'fulfilled' && r.value) merged[r.value.tab] = r.value.result; });
+        setAnalysisData(merged);
+      } catch (err) {
+        setError(`Erreur d'analyse automatique : ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+    runAll();
+  }, [hasSimLogs, sharedLogs]);
 
   const runAnalysis = async () => {
     setLoading(true);
     setError(null);
     try {
-      const logs = await fetchLogs();
-      if (logs.length === 0) {
-        setError("Aucun log disponible. Utilisez le module de simulation pour générer des données, puis revenez ici.");
-        return;
-      }
-
-      let result;
-      switch (activeTab) {
-        case 'process-discovery':
-          result = await AnalyticsService.processDiscovery(logs, 'inductive');
-          break;
-        case 'process-variants':
-          result = await AnalyticsService.processVariants(logs, 10);
-          break;
-        case 'bottleneck-analysis':
-          result = await AnalyticsService.bottleneckAnalysis(logs, 'waiting_time');
-          break;
-        case 'performance-prediction': {
-          const first = logs[0] || {};
-          const caseId = first.case_id || first.process_instance_id || first.processInstanceId || first.caseId || null;
-          if (!caseId) { setError('Aucun cas disponible pour la prédiction'); return; }
-          result = await AnalyticsService.performancePrediction(logs, 'completion_time', { case_id: caseId });
-          break;
-        }
-        case 'social-network-analysis':
-          result = await AnalyticsService.socialNetworkAnalysis(logs, 'handover_of_work');
-          break;
-        default:
-          setError("Type d'analyse non reconnu");
-          return;
-      }
-      setAnalysisData((prev) => ({ ...prev, [activeTab]: result }));
+      const logs = await resolveLogs();
+      await runAnalysisWithLogs(activeTab, logs);
     } catch (err) {
       setError(`Erreur lors de l'analyse : ${err.message}`);
     } finally {
@@ -386,9 +425,9 @@ export function AdvancedAnalyticsPage() {
                 <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setAnalysisData({}); }}
                   className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <Button variant="primary" onClick={runAnalysis} disabled={!selectedProcessKey || loading}>
+              <Button variant="primary" onClick={runAnalysis} disabled={loading || (!hasSimLogs && !selectedProcessKey)}>
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                {loading ? 'Analyse en cours...' : "Exécuter l'analyse"}
+                {loading ? 'Analyse en cours...' : "Relancer l'analyse"}
               </Button>
               <button
                 onClick={() => {
@@ -406,21 +445,13 @@ export function AdvancedAnalyticsPage() {
           </CardContent>
         </Card>
 
-        {sharedLogs?.length > 0 && (
-          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm border ${useSimLogs ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400'}`}>
+        {hasSimLogs && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm border bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400">
             <Zap className="h-4 w-4 shrink-0" />
             <span>
-              {useSimLogs
-                ? <><strong>{sharedLogs.length} logs simulés</strong> seront utilisés pour l'analyse.</>
-                : <><strong>{sharedLogs.length} logs simulés</strong> disponibles depuis le module de simulation.</>
-              }
+              <strong>{sharedLogs.length} logs</strong> chargés depuis la simulation / ETL
+              {loading ? ' — analyse en cours…' : Object.keys(analysisData).length > 0 ? ` — ${Object.keys(analysisData).length} analyses disponibles` : ''}
             </span>
-            <button
-              onClick={() => setUseSimLogs(v => !v)}
-              className={`ml-auto text-xs font-semibold px-3 py-1 rounded-lg border transition-colors ${useSimLogs ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700' : 'bg-white dark:bg-slate-800 border-amber-400 hover:bg-amber-50'}`}
-            >
-              {useSimLogs ? '✓ Logs simulés actifs' : 'Utiliser ces logs'}
-            </button>
           </div>
         )}
         {error && (
